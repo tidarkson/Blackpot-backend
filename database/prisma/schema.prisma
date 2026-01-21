@@ -1,0 +1,104 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Restaurant {
+  id          String   @id @default(uuid())
+  name        String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  locations   Location[]
+  users       User[]
+}
+
+model Location {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  name          String
+  address       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  tables      Table[]
+}
+
+model User {
+  id            String   @id @default(uuid())
+  restaurantId  String
+  email         String   @unique
+  name          String
+  role          UserRole
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+}
+
+model Table {
+  id          String   @id @default(uuid())
+  locationId String
+  number      Int
+  capacity    Int
+  status      TableStatus
+  x           Int
+  y           Int
+
+  location Location @relation(fields: [locationId], references: [id])
+}
+
+model Order {
+  id          String   @id @default(uuid())
+  locationId String
+  tableId     String?
+  status      OrderStatus
+  openedAt    DateTime @default(now())
+  closedAt    DateTime?
+
+  location Location @relation(fields: [locationId], references: [id])
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  orderId   String
+  amount    Float
+  method    PaymentMethod
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  SERVER
+  CHEF
+  SOMMELIER
+  HOST
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  CLEANING
+}
+
+enum OrderStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  PAID
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+}
