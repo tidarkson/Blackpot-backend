@@ -17,8 +17,8 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  restaurants Restaurant[]
-  users       User[]
+  restaurants  Restaurant[]
+  users        User[]
   activityLogs ActivityLog[]
 }
 
@@ -30,9 +30,9 @@ model Restaurant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  locations Location[]
-  menus     Menu[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  locations    Location[]
+  menus        Menu[]
   reservations Reservation[]
   businessDays BusinessDay[]
 }
@@ -47,9 +47,9 @@ model Location {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  tables       Table[]
-  users        User[]
+  restaurant      Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tables          Table[]
+  users           User[]
   kitchenStations KitchenStation[]
 }
 
@@ -70,10 +70,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  location     Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  orders       Order[]   @relation("ServerOrders")
-  tips         Tip[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location       Location?       @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  orders         Order[]         @relation("ServerOrders")
+  tips           Tip[]
   endOfDayCloses EndOfDayClose[]
 }
 
@@ -92,21 +92,21 @@ model Menu {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  sections     MenuSection[]
+  restaurant Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  sections   MenuSection[]
 }
 
 model MenuSection {
-  id       String   @id @default(uuid())
-  tenantId String
-  menuId   String
-  name     String
-  position Int
+  id        String   @id @default(uuid())
+  tenantId  String
+  menuId    String
+  name      String
+  position  Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  menu     Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
-  items    MenuItem[]
+  menu  Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  items MenuItem[]
 }
 
 model MenuItem {
@@ -120,8 +120,8 @@ model MenuItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  section     MenuSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  orderItems  OrderItem[]
+  section    MenuSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
 }
 
 // ===============================
@@ -129,27 +129,27 @@ model MenuItem {
 // ===============================
 
 model Table {
-  id         String       @id @default(uuid())
+  id         String      @id @default(uuid())
   tenantId   String
   locationId String
   name       String
   capacity   Int
-  status     TableStatus  @default(AVAILABLE)
+  status     TableStatus @default(AVAILABLE)
   x          Float
   y          Float
   width      Float
   height     Float
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
   deletedAt  DateTime?
 
-  location   Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  orders     Order[]
+  location     Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  orders       Order[]
   reservations Reservation[]
 }
 
 model Reservation {
-  id           String   @id @default(uuid())
+  id           String            @id @default(uuid())
   tenantId     String
   restaurantId String
   tableId      String
@@ -160,12 +160,12 @@ model Reservation {
   reservedAt   DateTime
   status       ReservationStatus @default(PENDING)
   notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
   cancelledAt  DateTime?
 
-  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  table        Table      @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  table      Table      @relation(fields: [tableId], references: [id], onDelete: Cascade)
 }
 
 // ===============================
@@ -173,44 +173,44 @@ model Reservation {
 // ===============================
 
 model Order {
-  id         String       @id @default(uuid())
+  id         String      @id @default(uuid())
   tenantId   String
   tableId    String
   serverId   String
-  status     OrderStatus  @default(OPEN)
+  status     OrderStatus @default(OPEN)
   guestCount Int
-  openedAt   DateTime     @default(now())
+  openedAt   DateTime    @default(now())
   closedAt   DateTime?
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
   deletedAt  DateTime?
 
-  table      Table        @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  server     User         @relation("ServerOrders", fields: [serverId], references: [id])
-  courses    OrderCourse[]
-  payments   Payment[]
-  tips       Tip[]
+  table         Table          @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  server        User           @relation("ServerOrders", fields: [serverId], references: [id])
+  courses       OrderCourse[]
+  payments      Payment[]
+  tips          Tip[]
   serviceCharge ServiceCharge?
 }
 
 model OrderCourse {
-  id          String      @id @default(uuid())
-  tenantId    String
-  orderId     String
-  courseType  CourseType
+  id               String     @id @default(uuid())
+  tenantId         String
+  orderId          String
+  courseType       CourseType
   kitchenStationId String?
-  firedAt     DateTime?
-  completedAt DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  firedAt          DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
-  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  items       OrderItem[]
+  order          Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items          OrderItem[]
   kitchenStation KitchenStation? @relation(fields: [kitchenStationId], references: [id], onDelete: SetNull)
 }
 
 model OrderItem {
-  id            String     @id @default(uuid())
+  id            String    @id @default(uuid())
   tenantId      String
   orderCourseId String
   menuItemId    String
@@ -218,11 +218,11 @@ model OrderItem {
   specialNotes  String?
   preparedAt    DateTime?
   servedAt      DateTime?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  orderCourse   OrderCourse @relation(fields: [orderCourseId], references: [id], onDelete: Cascade)
-  menuItem      MenuItem    @relation(fields: [menuItemId], references: [id])
+  orderCourse OrderCourse @relation(fields: [orderCourseId], references: [id], onDelete: Cascade)
+  menuItem    MenuItem    @relation(fields: [menuItemId], references: [id])
 }
 
 // ===============================
@@ -230,17 +230,17 @@ model OrderItem {
 // ===============================
 
 model Payment {
-  id        String         @id @default(uuid())
+  id        String        @id @default(uuid())
   tenantId  String
   orderId   String
-  amount    Decimal        @db.Decimal(10, 2)
+  amount    Decimal       @db.Decimal(10, 2)
   method    PaymentMethod
-  status    PaymentStatus  @default(COMPLETED)
+  status    PaymentStatus @default(COMPLETED)
   reference String?
-  createdAt DateTime       @default(now())
+  createdAt DateTime      @default(now())
 
-  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  receipt   Receipt?
+  order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  receipt Receipt?
 }
 
 model Tip {
@@ -252,31 +252,33 @@ model Tip {
   method    TipMethod
   createdAt DateTime  @default(now())
 
-  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  server    User      @relation(fields: [serverId], references: [id])
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  server  User    @relation(fields: [serverId], references: [id])
+  shift   Shift?  @relation(fields: [shiftId], references: [id])
+  shiftId String?
 }
 
 model ServiceCharge {
-  id        String  @id @default(uuid())
+  id        String   @id @default(uuid())
   tenantId  String
-  orderId   String  @unique
-  amount    Decimal @db.Decimal(10, 2)
-  reason    String  // e.g., "Large party", "Service charge"
+  orderId   String   @unique
+  amount    Decimal  @db.Decimal(10, 2)
+  reason    String // e.g., "Large party", "Service charge"
   createdAt DateTime @default(now())
 
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model Receipt {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   tenantId  String
-  paymentId String   @unique
-  number    String   @unique
+  paymentId String        @unique
+  number    String        @unique
   status    ReceiptStatus @default(PENDING)
   printedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime      @default(now())
 
-  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 }
 
 // ===============================
@@ -284,15 +286,15 @@ model Receipt {
 // ===============================
 
 model KitchenStation {
-  id       String   @id @default(uuid())
-  tenantId String
+  id         String   @id @default(uuid())
+  tenantId   String
   locationId String
-  name     String   // Grill, Pastry, Garde Manger, etc.
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name       String // Grill, Pastry, Garde Manger, etc.
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  courses    OrderCourse[]
+  location Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  courses  OrderCourse[]
 }
 
 // ===============================
@@ -300,15 +302,15 @@ model KitchenStation {
 // ===============================
 
 model BusinessDay {
-  id        String   @id @default(uuid())
-  tenantId  String
+  id           String            @id @default(uuid())
+  tenantId     String
   restaurantId String
-  date      DateTime @db.Date
-  status    BusinessDayStatus @default(OPEN)
-  openedAt  DateTime @default(now())
-  closedAt  DateTime?
+  date         DateTime          @db.Date
+  status       BusinessDayStatus @default(OPEN)
+  openedAt     DateTime          @default(now())
+  closedAt     DateTime?
 
-  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurant     Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   endOfDayCloses EndOfDayClose[]
 }
 
@@ -324,8 +326,8 @@ model EndOfDayClose {
   notes          String?
   createdAt      DateTime @default(now())
 
-  businessDay    BusinessDay @relation(fields: [businessDayId], references: [id], onDelete: Cascade)
-  closedByUser   User        @relation(fields: [closedByUserId], references: [id])
+  businessDay  BusinessDay @relation(fields: [businessDayId], references: [id], onDelete: Cascade)
+  closedByUser User        @relation(fields: [closedByUserId], references: [id])
 }
 
 model ActivityLog {
@@ -338,7 +340,81 @@ model ActivityLog {
   metadata  Json?
   createdAt DateTime @default(now())
 
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// ===============================
+/// — INVENTORY & WINE CELLAR
+/// ===============================
+
+model Supplier {
+  id             String          @id @default(uuid())
+  tenantId       String
+  name           String
+  contact        String?
+  createdAt      DateTime        @default(now())
+  inventoryItems InventoryItem[]
+}
+
+model InventoryItem {
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  category     String // food, beverage, wine
+  unit         String // kg, bottle, piece
+  currentStock Decimal
+  minStock     Decimal
+  unitCost     Decimal
+  supplierId   String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  supplier   Supplier?       @relation(fields: [supplierId], references: [id])
+  movements  StockMovement[]
+  wineDetail WineDetail?
+}
+
+model StockMovement {
+  id              String   @id @default(uuid())
+  tenantId        String
+  inventoryItemId String
+  type            String // in, out, adjustment
+  quantity        Decimal
+  reason          String
+  performedBy     String
+  createdAt       DateTime @default(now())
+
+  item InventoryItem @relation(fields: [inventoryItemId], references: [id])
+}
+
+model WineDetail {
+  id              String  @id @default(uuid())
+  inventoryItemId String  @unique
+  vintage         String?
+  region          String?
+  varietal        String?
+  binLocation     String?
+  tastingNotes    String?
+  pairingNotes    String?
+
+  item InventoryItem @relation(fields: [inventoryItemId], references: [id])
+}
+
+/// =======================================
+/// PHASE A6 — SHIFTS, TIPS & STAFF OPS
+/// =======================================
+
+model Shift {
+  id        String    @id @default(uuid())
+  tenantId  String
+  userId    String
+  role      String
+  startAt   DateTime
+  endAt     DateTime?
+  createdAt DateTime  @default(now())
+
+  tips Tip[]
 }
 
 // ===============================
