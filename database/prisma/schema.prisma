@@ -14,40 +14,33 @@ datasource db {
 model Tenant {
   id        String   @id @default(uuid())
   name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  restaurants  Restaurant[]
-  users        User[]
-  activityLogs ActivityLog[]
-}
-
-model Restaurant {
-  id        String   @id @default(uuid())
-  tenantId  String
-  name      String
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  locations    Location[]
-  menus        Menu[]
-  reservations Reservation[]
-  businessDays BusinessDay[]
+  locations         Location[]
+  menus             Menu[]
+  menuSections      MenuSection[]
+  menuItems         MenuItem[]
+  orderItems        OrderItem[]
+  reservations      Reservation[]
+  businessDays      BusinessDay[]
+  users             User[]
+  activityLogs      ActivityLog[]
+  notifications     Notification[]
+  financialSetting  FinancialSetting?
 }
 
 model Location {
   id           String   @id @default(uuid())
   tenantId     String
-  restaurantId String
   name         String
   address      String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  restaurant      Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   tables          Table[]
   users           User[]
   kitchenStations KitchenStation[]
@@ -60,7 +53,6 @@ model Location {
 model User {
   id           String   @id @default(uuid())
   tenantId     String
-  restaurantId String
   locationId   String?
   email        String   @unique
   name         String
@@ -84,7 +76,6 @@ model User {
 model Menu {
   id           String   @id @default(uuid())
   tenantId     String
-  restaurantId String
   name         String
   version      Int      @default(1)
   isActive     Boolean  @default(true)
@@ -92,8 +83,8 @@ model Menu {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  restaurant Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  sections   MenuSection[]
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sections MenuSection[]
 }
 
 model MenuSection {
@@ -105,8 +96,9 @@ model MenuSection {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  menu  Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
-  items MenuItem[]
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  menu   Menu       @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  items  MenuItem[]
 }
 
 model MenuItem {
@@ -120,6 +112,7 @@ model MenuItem {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   section    MenuSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
 }
@@ -151,7 +144,6 @@ model Table {
 model Reservation {
   id           String            @id @default(uuid())
   tenantId     String
-  restaurantId String
   tableId      String
   guestCount   Int
   guestName    String
@@ -164,8 +156,8 @@ model Reservation {
   updatedAt    DateTime          @updatedAt
   cancelledAt  DateTime?
 
-  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  table      Table      @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  table  Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
 }
 
 // ===============================
@@ -221,6 +213,7 @@ model OrderItem {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orderCourse OrderCourse @relation(fields: [orderCourseId], references: [id], onDelete: Cascade)
   menuItem    MenuItem    @relation(fields: [menuItemId], references: [id])
 }
@@ -304,13 +297,12 @@ model KitchenStation {
 model BusinessDay {
   id           String            @id @default(uuid())
   tenantId     String
-  restaurantId String
   date         DateTime          @db.Date
   status       BusinessDayStatus @default(OPEN)
   openedAt     DateTime          @default(now())
   closedAt     DateTime?
 
-  restaurant     Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   endOfDayCloses EndOfDayClose[]
 }
 
@@ -339,6 +331,31 @@ model ActivityLog {
   entityId  String?
   metadata  Json?
   createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String?
+  type      String
+  message   String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model FinancialSetting {
+  id                String   @id @default(uuid())
+  tenantId          String   @unique
+  taxRate           Decimal
+  serviceChargeRate Decimal?
+  currency          String
+  roundingStrategy  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

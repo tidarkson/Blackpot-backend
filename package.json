@@ -1,0 +1,32 @@
+{
+  "name": "blackpot-backend",
+  "version": "1.0.0",
+  "description": "Restaurant POS SaaS Backend",
+  "main": "src/main.ts",
+  "prisma": {
+    "schema": "database/prisma/schema.prisma",
+    "seed": "ts-node database/seeds/seed.ts"
+  },
+  "scripts": {
+    "dev": "ts-node src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:prod": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:seed": "ts-node database/seeds/seed.ts",
+    "db:reset": "prisma migrate reset --force"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "prisma": "^5.20.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}
