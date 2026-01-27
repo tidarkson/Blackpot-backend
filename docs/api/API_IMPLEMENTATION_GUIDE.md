@@ -61,28 +61,237 @@ A complete REST API for a fine dining restaurant POS system with:
 
 ---
 
-## 🚀 PHASE 1: PROJECT SETUP (1-2 hours)
+## 🚀 PHASE 1: PROJECT SETUP (2-3 hours)
 
-### Step 1.1: Initialize Express Project
+### Step 1.1: Create Complete Directory Structure
 
 ```bash
-# Create backend directory structure
 cd backend
-
-# Install dependencies
-npm install express cors dotenv helmet
-
-# Install TypeScript & types
-npm install --save-dev typescript @types/express @types/node ts-node
-
-# Initialize TypeScript config
-npx tsc --init
-
-# Create directory structure
-mkdir -p src/{routes,controllers,services,middleware,types,utils,config}
+mkdir -p src/{config,middleware,routes,controllers,services,models,utils,validators,types}
+mkdir -p tests logs dist
 ```
 
-### Step 1.2: Configure TypeScript
+### Step 1.2: Install Production Dependencies
+
+```bash
+# Core server & framework
+npm install express cors helmet dotenv
+
+# Database & ORM
+npm install @prisma/client
+
+# Authentication
+npm install jsonwebtoken bcryptjs
+
+# Validation
+npm install zod
+
+# Security & logging
+npm install express-rate-limit winston
+
+# Real-time & payments
+npm install socket.io stripe
+```
+
+### Step 1.3: Install Development Dependencies
+
+```bash
+# TypeScript
+npm install --save-dev typescript ts-node tsx @types/node
+
+# Express & library types
+npm install --save-dev @types/express @types/cors @types/jsonwebtoken @types/bcryptjs
+
+# Development tools
+npm install --save-dev nodemon
+
+# Linting & formatting
+npm install --save-dev eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin prettier
+
+# Testing
+npm install --save-dev jest @types/jest ts-jest
+
+# Prisma
+npm install --save-dev prisma
+```
+
+### Step 1.4: Create ESLint Configuration
+
+Create `.eslintrc.js`:
+
+```javascript
+module.exports = {
+  env: { node: true, es2021: true },
+  extends: ['eslint:recommended', 'plugin:@typescript-eslint/recommended'],
+  parser: '@typescript-eslint/parser',
+  parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
+  plugins: ['@typescript-eslint'],
+  rules: {
+    'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
+    '@typescript-eslint/explicit-module-boundary-types': 'off',
+  },
+};
+```
+
+### Step 1.5: Create Prettier Configuration
+
+Create `.prettierrc`:
+
+```json
+{
+  "semi": true,
+  "trailingComma": "es5",
+  "singleQuote": true,
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false,
+  "arrowParens": "always"
+}
+```
+
+### Step 1.6: Create Jest Configuration
+
+Create `jest.config.js`:
+
+```javascript
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/tests'],
+  testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).ts'],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+};
+```
+
+### Step 1.7: Create Nodemon Configuration
+
+Create `nodemon.json`:
+
+```json
+{
+  "watch": ["src"],
+  "ext": "ts,tsx",
+  "ignore": ["src/**/*.test.ts"],
+  "exec": "ts-node",
+  "delay": 500
+}
+```
+
+### Step 1.8: Update .env.example with All Variables
+
+Update `.env.example`:
+
+```bash
+# SERVER
+NODE_ENV=development
+PORT=3000
+HOST=localhost
+
+# DATABASE
+DATABASE_URL=postgresql://blackpot_user:un1vers1ty@localhost:5432/blackpot_dev
+
+# JWT
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+JWT_EXPIRY=24h
+REFRESH_TOKEN_EXPIRY=7d
+
+# LOGGING
+LOG_LEVEL=info
+
+# CORS
+CORS_ORIGIN=http://localhost:3000,http://localhost:3001
+
+# RATE LIMITING
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# STRIPE
+STRIPE_SECRET_KEY=sk_test_your_stripe_key
+STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_key
+
+# SOCKET.IO
+SOCKET_IO_CORS_ORIGIN=http://localhost:3000
+```
+
+### Step 1.9: Create Zod Validators
+
+Create `src/validators/auth.validator.ts`:
+
+```typescript
+import { z } from 'zod';
+
+export const loginSchema = z.object({
+  email: z.string().email('Invalid email'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
+
+export const registerSchema = z.object({
+  email: z.string().email('Invalid email'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+});
+
+export const passwordChangeSchema = z.object({
+  currentPassword: z.string(),
+  newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type PasswordChangeInput = z.infer<typeof passwordChangeSchema>;
+```
+
+### Step 1.10: Create Logger Configuration
+
+Create `src/config/logger.ts`:
+
+```typescript
+import winston from 'winston';
+import { config } from './environment';
+
+const logger = winston.createLogger({
+  level: config.LOG_LEVEL,
+  format: winston.format.combine(
+    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/all.log' }),
+  ],
+});
+
+export default logger;
+```
+
+### Step 1.11: Update package.json Scripts
+
+Replace the `scripts` section in `package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "dev:no-watch": "ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:prod": "prisma migrate deploy",
+    "db:seed": "ts-node database/seeds/seed.ts",
+    "db:studio": "prisma studio",
+    "db:reset": "prisma migrate reset --force",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  }
+}
+```
+
+### Step 1.12: Configure TypeScript
 
 Update `tsconfig.json`:
 
@@ -108,7 +317,7 @@ Update `tsconfig.json`:
 }
 ```
 
-### Step 1.3: Create Environment Configuration
+### Step 1.13: Create Environment Configuration
 
 Create `src/config/environment.ts`:
 
@@ -134,13 +343,87 @@ export const config = {
   // Logging
   LOG_LEVEL: process.env.LOG_LEVEL || 'info',
   
+  // CORS
+  CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  
+  // Rate limiting
+  RATE_LIMIT_WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
+  RATE_LIMIT_MAX_REQUESTS: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
+  
   // API
   API_VERSION: 'v1',
   API_PREFIX: '/api/v1',
 };
 ```
 
-### Step 1.4: Create Main Application File
+### Step 1.14: Create Request Validation Middleware
+
+Create `src/middleware/validation.ts`:
+
+```typescript
+import { Request, Response, NextFunction } from 'express';
+import { ZodSchema } from 'zod';
+
+export const validate = (schema: ZodSchema) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const validated = await schema.parseAsync(req.body);
+      req.body = validated;
+      next();
+    } catch (error) {
+      res.status(400).json({ error: 'Validation failed', details: error });
+    }
+  };
+};
+```
+
+### Step 1.15: Create Error Handler Middleware
+
+Create `src/middleware/errorHandler.ts`:
+
+```typescript
+import { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger';
+
+export const errorHandler = (
+  err: any,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  logger.error({
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+  });
+
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error',
+    status: err.status || 500,
+  });
+};
+```
+
+### Step 1.16: Create Request Logger Middleware
+
+Create `src/middleware/requestLogger.ts`:
+
+```typescript
+import { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger';
+
+export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
+  logger.info({
+    method: req.method,
+    path: req.path,
+    timestamp: new Date().toISOString(),
+  });
+  next();
+};
+```
+
+### Step 1.17: Create Main Application File
 
 Create `src/index.ts`:
 
@@ -148,47 +431,94 @@ Create `src/index.ts`:
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { config } from './config/environment';
+import logger from './config/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 
 const app = express();
 
-// Middleware
+// Security middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors({ origin: config.CORS_ORIGIN }));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: config.RATE_LIMIT_WINDOW_MS,
+  max: config.RATE_LIMIT_MAX_REQUESTS,
+  message: 'Too many requests from this IP, please try again later.',
+});
+app.use(limiter);
+
+// Body parsing
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Request logging
 app.use(requestLogger);
 
-// Routes (will add later)
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// API routes (will add later)
 app.use(`${config.API_PREFIX}/auth`, (req, res) => {
   res.json({ message: 'Auth routes - coming soon' });
 });
 
-// Error handling
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+// Error handler
 app.use(errorHandler);
 
 // Start server
 app.listen(config.PORT, config.HOST, () => {
-  console.log(`🚀 Server running at http://${config.HOST}:${config.PORT}`);
+  logger.info(`🚀 Server running at http://${config.HOST}:${config.PORT}`);
+  logger.info(`📝 API available at http://${config.HOST}:${config.PORT}${config.API_PREFIX}`);
 });
 ```
 
-### Step 1.5: Update package.json Scripts
+### ✅ Phase 1 Complete!
 
-```json
-{
-  "scripts": {
-    "dev": "ts-node src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "node -r ts-node/register database/seeds/seed.ts",
-    "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset"
-  }
-}
+You now have:
+- ✅ Complete folder structure
+- ✅ All npm dependencies installed
+- ✅ TypeScript configured (strict mode)
+- ✅ ESLint configured (code quality)
+- ✅ Prettier configured (code formatting)
+- ✅ Jest configured (testing ready)
+- ✅ Nodemon configured (hot reload)
+- ✅ Winston logger configured
+- ✅ Zod validators created
+- ✅ Express app initialized
+- ✅ Security middleware (helmet, CORS, rate limiting)
+- ✅ Error handling middleware
+- ✅ Request logging middleware
+- ✅ Environment variables configured
+
+**Test Phase 1:**
+
+```bash
+npm run dev
+# Should output:
+# 🚀 Server running at http://localhost:3000
+# 📝 API available at http://localhost:3000/api/v1
+
+# In another terminal:
+curl http://localhost:3000/health
+# Should return: { "status": "OK", "timestamp": "..." }
+
+# Test rate limiting:
+curl -X GET http://localhost:3000/api/v1/auth
+# Should return: { "message": "Auth routes - coming soon" }
 ```
+
+---
 
 ---
 

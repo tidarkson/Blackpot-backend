@@ -1,0 +1,10 @@
+{
+  "watch": ["backend/src"],
+  "ext": "ts,tsx",
+  "ignore": ["backend/src/**/*.test.ts", "node_modules"],
+  "exec": "ts-node",
+  "delay": 500,
+  "env": {
+    "NODE_PATH": "./backend/src"
+  }
+}
