@@ -6,6 +6,7 @@ import { config } from './config/environment';
 import logger from './config/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
+import authRoutes from './routes/auth';
 
 const app = express();
 
@@ -33,10 +34,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// API routes (will add later)
-app.use(`${config.API_PREFIX}/auth`, (req, res) => {
-  res.json({ message: 'Auth routes - coming soon' });
-});
+// API routes
+app.use(`${config.API_PREFIX}/auth`, authRoutes);
 
 // 404 handler
 app.use((req, res) => {

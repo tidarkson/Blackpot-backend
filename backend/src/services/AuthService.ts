@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { config } from '../config/environment';
-import { JWTPayload, AuthResponse } from '../types/auth';
+import { PrismaClient, UserRole } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { config } from "../config/environment";
+import { JWTPayload, AuthResponse } from "../types/auth";
 
 const prisma = new PrismaClient();
 
@@ -18,7 +18,9 @@ export class AuthService {
   }
 
   // Generate tokens
-  generateTokens(payload: Omit<JWTPayload, 'tenantId'> & { tenantId: string }): {
+  generateTokens(
+    payload: Omit<JWTPayload, "tenantId"> & { tenantId: string },
+  ): {
     accessToken: string;
     refreshToken: string;
   } {
@@ -29,7 +31,7 @@ export class AuthService {
     const refreshToken = jwt.sign(
       { userId: payload.userId, tenantId: payload.tenantId },
       config.JWT_SECRET,
-      { expiresIn: config.REFRESH_TOKEN_EXPIRY } as any
+      { expiresIn: config.REFRESH_TOKEN_EXPIRY } as any,
     );
 
     return { accessToken, refreshToken };
@@ -40,7 +42,7 @@ export class AuthService {
     try {
       return jwt.verify(token, config.JWT_SECRET as any) as JWTPayload;
     } catch (error) {
-      throw new Error('Invalid token');
+      throw new Error("Invalid token");
     }
   }
 
@@ -52,18 +54,21 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('Invalid credentials');
+      throw new Error("Invalid credentials");
     }
 
-    const passwordMatch = await this.verifyPassword(password, user.passwordHash);
+    const passwordMatch = await this.verifyPassword(
+      password,
+      user.passwordHash,
+    );
     if (!passwordMatch) {
-      throw new Error('Invalid credentials');
+      throw new Error("Invalid credentials");
     }
 
     const { accessToken, refreshToken } = this.generateTokens({
       userId: user.id,
       tenantId: user.tenantId,
-      locationId: user.locationId || '',
+      locationId: user.locationId || "",
       role: user.role,
       email: user.email,
     });
@@ -77,23 +82,88 @@ export class AuthService {
         name: user.name,
         role: user.role,
         tenantId: user.tenantId,
-        locationId: user.locationId || '',
+        locationId: user.locationId || "",
       },
     };
   }
 
   // Change password
-  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new Error('User not found');
+    if (!user) throw new Error("User not found");
 
-    const passwordMatch = await this.verifyPassword(currentPassword, user.passwordHash);
-    if (!passwordMatch) throw new Error('Current password incorrect');
+    const passwordMatch = await this.verifyPassword(
+      currentPassword,
+      user.passwordHash,
+    );
+    if (!passwordMatch) throw new Error("Current password incorrect");
 
     const hashedPassword = await this.hashPassword(newPassword);
     await prisma.user.update({
       where: { id: userId },
       data: { passwordHash: hashedPassword },
     });
+  }
+
+  // Register new user
+  async register(data: {
+    email: string;
+    password: string;
+    name: string;
+    role: UserRole;
+    tenantId?: string;
+    locationId: string;
+  }): Promise<AuthResponse> {
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: data.email },
+    });
+
+    if (existingUser) {
+      throw new Error("Email already registered");
+    }
+
+    // Hash password with bcrypt (10 rounds)
+    const passwordHash = await this.hashPassword(data.password);
+
+    // Create user in database
+    const user = await prisma.user.create({
+      data: {
+        email: data.email,
+        name: data.name,
+        passwordHash,
+        role: data.role,
+        tenantId: data.tenantId || "00000000-0000-0000-0000-000000000000", // Default tenant
+        locationId: data.locationId,
+        isActive: true,
+      },
+      include: { tenant: true, location: true },
+    });
+
+    // Generate JWT token
+    const { accessToken, refreshToken } = this.generateTokens({
+      userId: user.id,
+      tenantId: user.tenantId,
+      locationId: user.locationId || "",
+      role: user.role,
+      email: user.email,
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        tenantId: user.tenantId,
+        locationId: user.locationId || "",
+      },
+    };
   }
 }
