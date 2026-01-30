@@ -1,8 +1,8 @@
-import { PrismaClient, UserRole } from "@prisma/client";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import { config } from "../config/environment";
-import { JWTPayload, AuthResponse } from "../types/auth";
+import { PrismaClient, UserRole } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { config } from '../config/environment';
+import { JWTPayload, AuthResponse } from '../types/auth';
 
 const prisma = new PrismaClient();
 
@@ -18,9 +18,7 @@ export class AuthService {
   }
 
   // Generate tokens
-  generateTokens(
-    payload: Omit<JWTPayload, "tenantId"> & { tenantId: string },
-  ): {
+  generateTokens(payload: Omit<JWTPayload, 'tenantId'> & { tenantId: string }): {
     accessToken: string;
     refreshToken: string;
   } {
@@ -31,7 +29,7 @@ export class AuthService {
     const refreshToken = jwt.sign(
       { userId: payload.userId, tenantId: payload.tenantId },
       config.JWT_SECRET,
-      { expiresIn: config.REFRESH_TOKEN_EXPIRY } as any,
+      { expiresIn: config.REFRESH_TOKEN_EXPIRY } as any
     );
 
     return { accessToken, refreshToken };
@@ -42,7 +40,7 @@ export class AuthService {
     try {
       return jwt.verify(token, config.JWT_SECRET as any) as JWTPayload;
     } catch (error) {
-      throw new Error("Invalid token");
+      throw new Error('Invalid token');
     }
   }
 
@@ -54,21 +52,18 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error("Invalid credentials");
+      throw new Error('Invalid credentials');
     }
 
-    const passwordMatch = await this.verifyPassword(
-      password,
-      user.passwordHash,
-    );
+    const passwordMatch = await this.verifyPassword(password, user.passwordHash);
     if (!passwordMatch) {
-      throw new Error("Invalid credentials");
+      throw new Error('Invalid credentials');
     }
 
     const { accessToken, refreshToken } = this.generateTokens({
       userId: user.id,
       tenantId: user.tenantId,
-      locationId: user.locationId || "",
+      locationId: user.locationId || '',
       role: user.role,
       email: user.email,
     });
@@ -82,7 +77,7 @@ export class AuthService {
         name: user.name,
         role: user.role,
         tenantId: user.tenantId,
-        locationId: user.locationId || "",
+        locationId: user.locationId || '',
       },
     };
   }
@@ -91,16 +86,13 @@ export class AuthService {
   async changePassword(
     userId: string,
     currentPassword: string,
-    newPassword: string,
+    newPassword: string
   ): Promise<void> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new Error("User not found");
+    if (!user) throw new Error('User not found');
 
-    const passwordMatch = await this.verifyPassword(
-      currentPassword,
-      user.passwordHash,
-    );
-    if (!passwordMatch) throw new Error("Current password incorrect");
+    const passwordMatch = await this.verifyPassword(currentPassword, user.passwordHash);
+    if (!passwordMatch) throw new Error('Current password incorrect');
 
     const hashedPassword = await this.hashPassword(newPassword);
     await prisma.user.update({
@@ -124,7 +116,7 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new Error("Email already registered");
+      throw new Error('Email already registered');
     }
 
     // Hash password with bcrypt (10 rounds)
@@ -137,7 +129,7 @@ export class AuthService {
         name: data.name,
         passwordHash,
         role: data.role,
-        tenantId: data.tenantId || "00000000-0000-0000-0000-000000000000", // Default tenant
+        tenantId: data.tenantId || '00000000-0000-0000-0000-000000000000', // Default tenant
         locationId: data.locationId,
         isActive: true,
       },
@@ -148,7 +140,7 @@ export class AuthService {
     const { accessToken, refreshToken } = this.generateTokens({
       userId: user.id,
       tenantId: user.tenantId,
-      locationId: user.locationId || "",
+      locationId: user.locationId || '',
       role: user.role,
       email: user.email,
     });
@@ -162,8 +154,42 @@ export class AuthService {
         name: user.name,
         role: user.role,
         tenantId: user.tenantId,
-        locationId: user.locationId || "",
+        locationId: user.locationId || '',
       },
+    };
+  }
+
+  async getCurrentUser(userId: string): Promise<{
+    id: string;
+    email: string;
+    name: string;
+    role: UserRole;
+    tenantId: string;
+    locationId: string;
+    tenant: { id: string; name: string } | null;
+    location: { id: string; name: string } | null;
+  }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        tenant: { select: { id: true, name: true } },
+        location: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      tenantId: user.tenantId,
+      locationId: user.locationId || '',
+      tenant: user.tenant,
+      location: user.location,
     };
   }
 }

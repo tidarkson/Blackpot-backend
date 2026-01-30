@@ -15,7 +15,17 @@ export const registerSchema = z.object({
   email: z.string().email('Invalid email format'),
   password: passwordStrengthSchema,
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-  role: z.enum(['OWNER', 'MANAGER', 'SUPERVISOR', 'SERVER', 'HOST', 'CHEF', 'SOMMELIER', 'DISHWASHER', 'BARTENDER']),
+  role: z.enum([
+    'OWNER',
+    'MANAGER',
+    'SUPERVISOR',
+    'SERVER',
+    'HOST',
+    'CHEF',
+    'SOMMELIER',
+    'DISHWASHER',
+    'BARTENDER',
+  ]),
   locationId: z.string().uuid(),
   tenantId: z.string().uuid().optional(), // For initial registration
 });
@@ -25,6 +35,28 @@ export const passwordChangeSchema = z.object({
   newPassword: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Invalid email format'),
+});
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1, 'Reset token is required'),
+    newPassword: passwordStrengthSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+export const verifyResetTokenSchema = z.object({
+  token: z.string().min(1, 'Reset token is required'),
+});
+
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type VerifyResetTokenInput = z.infer<typeof verifyResetTokenSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type PasswordChangeInput = z.infer<typeof passwordChangeSchema>;

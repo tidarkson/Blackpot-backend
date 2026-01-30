@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/AuthService';
 import { JWTPayload } from '../types/auth';
+// import { TokenBlacklistService } from '../services/TokenBlacklistService';
+// const blacklistService = new TokenBlacklistService();
 
 declare global {
   namespace Express {
@@ -12,19 +14,20 @@ declare global {
 
 const authService = new AuthService();
 
-export const authenticate = (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (!token) {
-      return res.status(401).json({
-        status: 'error',
-        code: 401,
-        error: 'INVALID_TOKEN',
-        message: 'No authentication token provided',
-      });
-    }
+export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+  const token = req.headers.authorization?.replace('bearer ', '');
 
-    const payload = authService.verifyToken(token);
+  if (!token) {
+    return res.status(401).json({
+      status: 'error',
+      code: 401,
+      error: 'INVALID_TOKEN',
+      message: 'No authentication token provided',
+    });
+  }
+
+  try {
+    const payload = await authService.verifyToken(token);
     req.user = payload;
     next();
   } catch (error) {
