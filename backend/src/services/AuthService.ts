@@ -45,7 +45,7 @@ export class AuthService {
   }
 
   // Login
-  async login(email: string, password: string): Promise<AuthResponse> {
+  async login(email: string, password: string, ipAddress?: string): Promise<AuthResponse> {
     const user = await prisma.user.findUnique({
       where: { email },
       include: { tenant: true, location: true },
@@ -55,17 +55,52 @@ export class AuthService {
       throw new Error('Invalid credentials');
     }
 
+    // Check if account is locked
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      const remainingMinutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+      throw new Error(`Account is locked. Try again in ${remainingMinutes} minutes.`);
+    }
+
     const passwordMatch = await this.verifyPassword(password, user.passwordHash);
+
     if (!passwordMatch) {
+      // Increment failed attempts
+      const newFailedAttempts = user.failedLoginAttempts + 1;
+      let lockedUntil = null;
+
+      // Lock account after 5 failed attempts
+      if (newFailedAttempts >= 5) {
+        lockedUntil = new Date(Date.now() + 15 * 60 * 1000); // Lock for 15 minutes
+      }
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: newFailedAttempts,
+          lockedUntil,
+        },
+      });
+
       throw new Error('Invalid credentials');
     }
 
+    // Successful login - reset failed attempts
     const { accessToken, refreshToken } = this.generateTokens({
       userId: user.id,
       tenantId: user.tenantId,
       locationId: user.locationId || '',
       role: user.role,
       email: user.email,
+    });
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        lastLoginAt: new Date(),
+        lastLoginIp: ipAddress,
+      },
     });
 
     return {

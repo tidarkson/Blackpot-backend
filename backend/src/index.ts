@@ -7,8 +7,11 @@ import logger from './config/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import authRoutes from './routes/auth';
+import { apiLimiter } from './middleware/rateLimiter';
 
 const app = express();
+
+app.use('/api/', apiLimiter); // Apply to all API routes
 
 // Security middleware
 app.use(helmet());

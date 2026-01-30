@@ -11,7 +11,9 @@ export class AuthController {
   static async login(req: Request, res: Response) {
     try {
       const { email, password } = req.body;
-      const result = await authService.login(email, password);
+      const ipAddress = req.ip || req.socket.remoteAddress;
+
+      const result = await authService.login(email, password, ipAddress);
 
       return res.status(200).json({
         status: 'success',
@@ -19,6 +21,16 @@ export class AuthController {
         data: result,
       });
     } catch (error: any) {
+      // Handle account lockout
+      if (error.message.includes('locked')) {
+        return res.status(423).json({
+          status: 'error',
+          code: 423,
+          error: 'ACCOUNT_LOCKED',
+          message: error.message,
+        });
+      }
+
       return res.status(401).json({
         status: 'error',
         code: 401,
