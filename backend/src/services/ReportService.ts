@@ -27,7 +27,8 @@ export class ReportService {
     const itemCounts: { [key: string]: number } = {};
 
     orders.forEach(order => {
-      totalSales += Number(order.total || 0);
+      const orderTotal = order.payments?.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) || 0;
+      totalSales += orderTotal;
       totalGuests += order.guestCount || 0;
 
       order.courses?.forEach(course => {

@@ -1,4 +1,4 @@
-import { PrismaClient, PaymentMethod, PaymentStatus } from '@prisma/client';
+import { PrismaClient, PaymentMethod, PaymentStatus, TipMethod } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
 const prisma = new PrismaClient();
@@ -69,6 +69,7 @@ export class PaymentService {
 
     return prisma.payment.create({
       data: {
+        tenantId,
         orderId,
         method: data.method,
         amount: data.amount,
@@ -84,7 +85,7 @@ export class PaymentService {
     tenantId: string,
     data: {
       amount: Decimal;
-      method: string;
+      method: TipMethod;
     }
   ) {
     const order = await prisma.order.findFirst({
@@ -95,7 +96,9 @@ export class PaymentService {
 
     return prisma.tip.create({
       data: {
+        tenantId,
         orderId,
+        serverId: order.serverId,
         amount: data.amount,
         method: data.method,
       },

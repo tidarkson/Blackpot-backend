@@ -235,6 +235,8 @@ model Payment {
   method    PaymentMethod
   status    PaymentStatus @default(COMPLETED)
   reference String?
+  cardLastFour String?
+  processedAt DateTime?
   createdAt DateTime      @default(now())
 
   order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
