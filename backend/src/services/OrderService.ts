@@ -51,7 +51,12 @@ export class OrderService {
   async getOrdersByTable(tableId: string, tenantId: string) {
     return prisma.order.findMany({
       where: { tableId, tenantId, status: OrderStatus.OPEN },
-      include: { courses: true, payments: true },
+      include: {
+        courses: { include: { items: { include: { menuItem: true } } } },
+        payments: true,
+        table: true,
+        server: true,
+      },
     });
   }
 
@@ -74,7 +79,7 @@ export class OrderService {
     return prisma.order.update({
       where: { id: orderId },
       data: {
-        status: OrderStatus.CLOSED,
+        status: 'CLOSED',
         subtotal,
         tax,
         total,
@@ -86,29 +91,33 @@ export class OrderService {
   async addCourse(
     orderId: string,
     tenantId: string,
-    courseType: CourseType
+    courseType: CourseType,
+    kitchenStationId?: string
   ) {
     const order = await this.getOrderById(orderId, tenantId);
     if (!order) throw new Error('Order not found');
 
     return prisma.orderCourse.create({
       data: {
+        tenantId,
         orderId,
         courseType,
-        status: 'PENDING',
+        kitchenStationId,
       },
     });
   }
 
   async addItemToCourse(
-    courseId: string,
+    orderCourseId: string,
+    tenantId: string,
     menuItemId: string,
     quantity: number,
     specialNotes?: string
   ) {
     return prisma.orderItem.create({
       data: {
-        courseId,
+        tenantId,
+        orderCourseId,
         menuItemId,
         quantity,
         specialNotes,

@@ -29,6 +29,12 @@ model Tenant {
   activityLogs     ActivityLog[]
   notifications    Notification[]
   financialSetting FinancialSetting?
+  orders           Order[]
+  payments         Payment[]
+  tips             Tip[]
+  serviceCharges   ServiceCharge[]
+  receipts         Receipt[]
+  kitchenStations  KitchenStation[]
 }
 
 model Location {
@@ -66,12 +72,14 @@ model User {
   lastLoginAt         DateTime?
   lastLoginIp         String?
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  location       Location?       @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  orders         Order[]         @relation("ServerOrders")
-  tips           Tip[]
-  endOfDayCloses EndOfDayClose[]
-  passwordResets PasswordReset[]
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location         Location?       @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  serverOrders     Order[]         @relation("ServerOrders")
+  assignedOrders   Order[]         @relation("AssignedOrders")
+  tips             Tip[]
+  endOfDayCloses   EndOfDayClose[]
+  passwordResets   PasswordReset[]
+  shifts           Shift[]
 }
 
 // ===============================
@@ -174,16 +182,22 @@ model Order {
   tenantId   String
   tableId    String
   serverId   String
+  userId     String?
   status     OrderStatus @default(OPEN)
   guestCount Int
+  subtotal   Decimal     @default(0) @db.Decimal(10, 2)
+  tax        Decimal     @default(0) @db.Decimal(10, 2)
+  total      Decimal     @default(0) @db.Decimal(10, 2)
   openedAt   DateTime    @default(now())
   closedAt   DateTime?
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   deletedAt  DateTime?
 
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   table         Table          @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  server        User           @relation("ServerOrders", fields: [serverId], references: [id])
+  server        User           @relation("ServerOrders", fields: [serverId], references: [id], onDelete: Cascade)
+  assignedUser  User?          @relation("AssignedOrders", fields: [userId], references: [id], onDelete: SetNull)
   courses       OrderCourse[]
   payments      Payment[]
   tips          Tip[]
@@ -191,7 +205,7 @@ model Order {
 }
 
 model OrderCourse {
-  id               String     @id @default(uuid())
+  id               String   @id @default(uuid())
   tenantId         String
   orderId          String
   courseType       CourseType
@@ -220,7 +234,7 @@ model OrderItem {
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orderCourse OrderCourse @relation(fields: [orderCourseId], references: [id], onDelete: Cascade)
-  menuItem    MenuItem    @relation(fields: [menuItemId], references: [id])
+  menuItem    MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
 }
 
 // ===============================
@@ -228,17 +242,19 @@ model OrderItem {
 // ===============================
 
 model Payment {
-  id        String        @id @default(uuid())
-  tenantId  String
-  orderId   String
-  amount    Decimal       @db.Decimal(10, 2)
-  method    PaymentMethod
-  status    PaymentStatus @default(COMPLETED)
-  reference String?
+  id          String        @id @default(uuid())
+  tenantId    String
+  orderId     String
+  amount      Decimal       @db.Decimal(10, 2)
+  method      PaymentMethod
+  status      PaymentStatus @default(COMPLETED)
+  reference   String?
   cardLastFour String?
   processedAt DateTime?
-  createdAt DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order   Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   receipt Receipt?
 }
@@ -250,12 +266,14 @@ model Tip {
   serverId  String
   amount    Decimal   @db.Decimal(10, 2)
   method    TipMethod
+  shiftId   String?
   createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  server  User    @relation(fields: [serverId], references: [id])
-  shift   Shift?  @relation(fields: [shiftId], references: [id])
-  shiftId String?
+  server  User    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  shift   Shift?  @relation(fields: [shiftId], references: [id], onDelete: SetNull)
 }
 
 model ServiceCharge {
@@ -263,10 +281,12 @@ model ServiceCharge {
   tenantId  String
   orderId   String   @unique
   amount    Decimal  @db.Decimal(10, 2)
-  reason    String // e.g., "Large party", "Service charge"
+  reason    String
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }
 
 model Receipt {
@@ -277,7 +297,9 @@ model Receipt {
   status    ReceiptStatus @default(PENDING)
   printedAt DateTime?
   createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 }
 
@@ -289,11 +311,12 @@ model KitchenStation {
   id         String   @id @default(uuid())
   tenantId   String
   locationId String
-  name       String // Grill, Pastry, Garde Manger, etc.
+  name       String
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  location Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
   courses  OrderCourse[]
 }
 
@@ -308,6 +331,7 @@ model BusinessDay {
   status   BusinessDayStatus @default(OPEN)
   openedAt DateTime          @default(now())
   closedAt DateTime?
+  updatedAt DateTime         @updatedAt
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   endOfDayCloses EndOfDayClose[]
@@ -324,9 +348,10 @@ model EndOfDayClose {
   discrepancy    Decimal  @db.Decimal(10, 2)
   notes          String?
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   businessDay  BusinessDay @relation(fields: [businessDayId], references: [id], onDelete: Cascade)
-  closedByUser User        @relation(fields: [closedByUserId], references: [id])
+  closedByUser User        @relation(fields: [closedByUserId], references: [id], onDelete: Cascade)
 }
 
 model ActivityLog {
@@ -357,8 +382,8 @@ model Notification {
 model FinancialSetting {
   id                String   @id @default(uuid())
   tenantId          String   @unique
-  taxRate           Decimal
-  serviceChargeRate Decimal?
+  taxRate           Decimal  @db.Decimal(5, 4)
+  serviceChargeRate Decimal? @db.Decimal(5, 4)
   currency          String
   roundingStrategy  String?
   createdAt         DateTime @default(now())
@@ -367,9 +392,9 @@ model FinancialSetting {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
-/// ===============================
-/// — INVENTORY & WINE CELLAR
-/// ===============================
+// ===============================
+// INVENTORY & WINE CELLAR
+// ===============================
 
 model Supplier {
   id             String          @id @default(uuid())
@@ -377,6 +402,7 @@ model Supplier {
   name           String
   contact        String?
   createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   inventoryItems InventoryItem[]
 }
 
@@ -384,17 +410,17 @@ model InventoryItem {
   id           String   @id @default(uuid())
   tenantId     String
   name         String
-  category     String // food, beverage, wine
-  unit         String // kg, bottle, piece
-  currentStock Decimal
-  minStock     Decimal
-  unitCost     Decimal
+  category     String
+  unit         String
+  currentStock Decimal  @db.Decimal(10, 2)
+  minStock     Decimal  @db.Decimal(10, 2)
+  unitCost     Decimal  @db.Decimal(10, 2)
   supplierId   String?
   metadata     Json?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  supplier   Supplier?       @relation(fields: [supplierId], references: [id])
+  supplier   Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   movements  StockMovement[]
   wineDetail WineDetail?
 }
@@ -403,13 +429,14 @@ model StockMovement {
   id              String   @id @default(uuid())
   tenantId        String
   inventoryItemId String
-  type            String // in, out, adjustment
-  quantity        Decimal
+  type            String
+  quantity        Decimal  @db.Decimal(10, 2)
   reason          String
   performedBy     String
   createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  item InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  item InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
 }
 
 model WineDetail {
@@ -421,13 +448,15 @@ model WineDetail {
   binLocation     String?
   tastingNotes    String?
   pairingNotes    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  item InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  item InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
 }
 
-/// =======================================
-/// PHASE A6 — SHIFTS, TIPS & STAFF OPS
-/// =======================================
+// ===============================
+// SHIFTS, TIPS & STAFF OPS
+// ===============================
 
 model Shift {
   id        String    @id @default(uuid())
@@ -437,19 +466,22 @@ model Shift {
   startAt   DateTime
   endAt     DateTime?
   createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   tips Tip[]
 }
 
 model PasswordReset {
   id        String    @id @default(cuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
@@ -505,6 +537,7 @@ enum OrderStatus {
   READY
   COMPLETED
   PAID
+  CLOSED
   CANCELLED
 }
 

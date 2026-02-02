@@ -598,14 +598,17 @@ async function main() {
     // Add courses to order
     const courseTypes = [CourseType.APPETIZER, CourseType.MAIN, CourseType.DESSERT];
     for (let courseIdx = 0; courseIdx < courseTypes.length; courseIdx++) {
+      const firedAt = new Date(order.openedAt.getTime() + courseIdx * 20 * 60 * 1000);
+      const completedAt = new Date(order.openedAt.getTime() + (courseIdx * 20 + 15) * 60 * 1000);
+
       const course = await prisma.orderCourse.create({
         data: {
           tenantId: tenant.id,
           orderId: order.id,
           courseType: courseTypes[courseIdx],
           kitchenStationId: stations[Math.floor(Math.random() * stations.length)].id,
-          firedAt: new Date(order.openedAt.getTime() + courseIdx * 20 * 60 * 1000),
-          completedAt: new Date(order.openedAt.getTime() + (courseIdx * 20 + 15) * 60 * 1000),
+          firedAt,
+          completedAt,
         },
       });
 
@@ -619,8 +622,8 @@ async function main() {
             menuItemId: menuItems[Math.floor(Math.random() * menuItems.length)].id,
             quantity: 1 + Math.floor(Math.random() * 2),
             specialNotes: Math.random() > 0.7 ? 'No nuts, please' : null,
-            preparedAt: new Date(course.firedAt!.getTime() + 10 * 60 * 1000),
-            servedAt: new Date(course.completedAt!.getTime() + 2 * 60 * 1000),
+            preparedAt: new Date(firedAt.getTime() + 10 * 60 * 1000),
+            servedAt: new Date(completedAt.getTime() + 2 * 60 * 1000),
           },
         });
       }

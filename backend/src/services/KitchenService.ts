@@ -7,14 +7,12 @@ export class KitchenService {
     return prisma.orderCourse.findMany({
       where: {
         kitchenStationId: stationId,
-        status: 'FIRED',
         order: { tenantId },
       },
       include: {
         order: {
           include: {
             table: true,
-            items: { include: { menuItem: true } },
           },
         },
         items: { include: { menuItem: true } },
@@ -27,7 +25,6 @@ export class KitchenService {
     return prisma.orderCourse.findMany({
       where: {
         order: { tenantId },
-        status: 'FIRED',
       },
       include: {
         order: { include: { table: true } },
@@ -49,7 +46,7 @@ export class KitchenService {
 
     return prisma.orderCourse.update({
       where: { id: courseId },
-      data: { status: 'READY', readyAt: new Date() },
+      data: { completedAt: new Date() },
     });
   }
 
@@ -57,10 +54,8 @@ export class KitchenService {
     return prisma.orderCourse.update({
       where: { id: courseId },
       data: {
-        status: 'FIRED',
         kitchenStationId: stationId,
         firedAt: new Date(),
-        kitchenNotes: notes,
       },
     });
   }
@@ -72,12 +67,12 @@ export class KitchenService {
         firedAt: {
           gte: new Date(Date.now() - 60 * 60 * 1000),
         },
-        readyAt: { not: null },
+        completedAt: { not: null },
       },
     });
 
     const avgPrepTime = lastHourOrders.reduce((sum, course) => {
-      const prepTime = course.readyAt!.getTime() - course.firedAt!.getTime();
+      const prepTime = course.completedAt!.getTime() - course.firedAt!.getTime();
       return sum + prepTime;
     }, 0) / Math.max(lastHourOrders.length, 1);
 
@@ -85,7 +80,7 @@ export class KitchenService {
       totalFiredInLastHour: lastHourOrders.length,
       averagePrepTime: Math.round(avgPrepTime / 1000), // seconds
       allPendingCourses: await prisma.orderCourse.count({
-        where: { status: 'FIRED', order: { tenantId } },
+        where: { firedAt: { not: null }, completedAt: null, order: { tenantId } },
       }),
     };
   }
