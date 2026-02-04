@@ -82,6 +82,60 @@ const emailTemplates = {
     </body>
     </html>
   `,
+
+    receipt: (
+    orderNumber: string,
+    total: string,
+    items: Array<{ name: string; qty: number; price: string }>,
+    userName: string
+  ): string => {
+    const itemsHtml = items
+      .map(
+        (item) =>
+          `<tr><td>${item.name}</td><td>${item.qty}</td><td>$${item.price}</td></tr>`
+      )
+      .join('');
+
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #2c3e50; color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; border: 1px solid #ddd; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f5f5f5; font-weight: bold; }
+        .total { text-align: right; font-weight: bold; font-size: 18px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Order Receipt</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${userName},</p>
+          <p><strong>Order #${orderNumber}</strong></p>
+          <table>
+            <thead>
+              <tr><th>Item</th><th>Qty</th><th>Price</th></tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          <p class="total">Total: $${total}</p>
+          <p>Thank you for your order!</p>
+          <p>Best regards,<br>The BlackPot Team</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+  },
 };
 
 export class EmailService {
@@ -186,6 +240,29 @@ export class EmailService {
     }
   }
 
+  async sendReceiptEmail(
+    email: string,
+    recipientName: string,
+    orderNumber: string,
+    total: string,
+    items: Array<{ name: string; qty: number; price: string }>
+  ): Promise<void> {
+    try {
+      const mailOptions = {
+        from: this.fromEmail,
+        to: email,
+        subject: `BlackPot - Order Receipt #${orderNumber}`,
+        html: emailTemplates.receipt(orderNumber, total, items, recipientName),
+      };
+
+      await this.transporter.sendMail(mailOptions);
+      logger.info(`📧 Receipt email sent to ${email}`);
+    } catch (error: any) {
+      logger.error(`❌ Failed to send receipt email to ${email}:`, error.message);
+      throw new Error(`Failed to send receipt email: ${error.message}`);
+    }
+  }
+
   async sendPasswordChangedEmail(email: string, recipientName: string): Promise<void> {
     try {
       const mailOptions = {
@@ -193,17 +270,45 @@ export class EmailService {
         to: email,
         subject: 'BlackPot - Password Changed',
         html: `
-          <p>Hi ${recipientName},</p>
-          <p>Your password has been successfully changed.</p>
-          <p>If you didn't make this change, please contact support immediately.</p>
+          <!DOCTYPE html>
+          <html>
+          <body style="font-family: Arial, sans-serif;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h2>Password Successfully Changed</h2>
+              <p>Hi ${recipientName},</p>
+              <p>Your password has been successfully changed.</p>
+              <p>If you did not make this change, please contact support immediately.</p>
+              <p>Best regards,<br>The BlackPot Team</p>
+            </div>
+          </body>
+          </html>
         `,
       };
 
       await this.transporter.sendMail(mailOptions);
-      logger.info(`📧 Password changed confirmation sent to ${email}`);
+      logger.info(`📧 Password changed email sent to ${email}`);
     } catch (error: any) {
       logger.error(`❌ Failed to send password changed email to ${email}:`, error.message);
       throw new Error(`Failed to send password changed email: ${error.message}`);
+    }
+  }
+
+  async sendBulkEmails(
+    emails: Array<{ to: string; subject: string; html: string }>
+  ): Promise<void> {
+    try {
+      for (const email of emails) {
+        await this.transporter.sendMail({
+          from: this.fromEmail,
+          to: email.to,
+          subject: email.subject,
+          html: email.html,
+        });
+      }
+      logger.info(`📧 Bulk emails sent: ${emails.length} emails`);
+    } catch (error: any) {
+      logger.error(`❌ Failed to send bulk emails:`, error.message);
+      throw new Error(`Failed to send bulk emails: ${error.message}`);
     }
   }
 }

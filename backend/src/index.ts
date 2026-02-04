@@ -7,6 +7,10 @@ import logger from './config/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import authRoutes from './routes/auth';
+import reconciliationRoutes from './routes/reconciliation';
+import shiftRoutes from './routes/shift';
+import reportRoutes from './routes/reports';
+import menuRoutes from './routes/menu';
 import { apiLimiter } from './middleware/rateLimiter';
 
 const app = express();
@@ -39,6 +43,10 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use(`${config.API_PREFIX}/auth`, authRoutes);
+app.use(`${config.API_PREFIX}/reconciliation`, reconciliationRoutes);
+app.use(`${config.API_PREFIX}/shifts`, shiftRoutes);
+app.use(`${config.API_PREFIX}/reports`, reportRoutes);
+app.use(`${config.API_PREFIX}/menus`, menuRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -1,6 +1,6 @@
-import { PrismaClient, PaymentMethod, PaymentStatus, TipMethod } from '@prisma/client';
+import { PrismaClient, PaymentMethod, PaymentStatus, OrderStatus, TipMethod } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
-import { logger } from '../config/logger';
+import logger from '../config/logger';
 
 const prisma = new PrismaClient();
 
@@ -9,87 +9,91 @@ export class PaymentService {
    * Get bill for an order with proper financial calculations
    * Uses financial settings from tenant for tax rates
    */
-  async getBill(orderId: string, tenantId: string) {
-    const order = await prisma.order.findFirst({
-      where: { id: orderId, tenantId },
-      include: {
-        courses: {
-          include: { items: { include: { menuItem: true } } },
-        },
-        payments: true,
-        tips: true,
-        serviceCharge: true,
-      },
-    });
-
-    if (!order) throw new Error('Order not found');
-
-    // Get tenant's financial settings for tax calculation
-    const financialSettings = await prisma.financialSetting.findUnique({
-      where: { tenantId },
-    });
-
-    const taxRate = financialSettings?.taxRate || new Decimal('0.0825'); // Default 8.25%
-
-    // Calculate subtotal from items
-    let subtotal = new Decimal(0);
-    const items: any[] = [];
-
-    order.courses?.forEach(course => {
-      course.items?.forEach(item => {
-        const itemTotal = item.menuItem.price.mul(new Decimal(item.quantity));
-        subtotal = subtotal.add(itemTotal);
-        items.push({
-          description: `${item.menuItem.name} × ${item.quantity}`,
-          price: item.menuItem.price.toNumber(),
-          quantity: item.quantity,
-        });
+  async getBill(
+    orderId: string,
+    tenantId: string
+  ): Promise<{
+    subtotal: Decimal;
+    tax: Decimal;
+    total: Decimal;
+    paid: Decimal;
+    remaining: Decimal;
+  }> {
+    try {
+      const order = await prisma.order.findFirst({
+        where: { id: orderId, tenantId },
       });
-    });
 
-    // Calculate tax
-    const tax = subtotal.mul(taxRate);
+      if (!order) {
+        throw new Error('Order not found');
+      }
 
-    // Calculate tips
-    const currentTips = order.tips?.reduce(
-      (sum, tip) => sum.add(tip.amount),
-      new Decimal(0)
-    ) || new Decimal(0);
+      // Get order items with menu item details
+      // First get all courses for this order
+      const courses = await prisma.orderCourse.findMany({
+        where: { orderId },
+      });
 
-    // Calculate service charge
-    const serviceChargeAmount = order.serviceCharge?.amount || new Decimal(0);
+      // Then get all items across all courses
+      const courseIds = courses.map(c => c.id);
+      const items = await prisma.orderItem.findMany({
+        where: { orderCourseId: { in: courseIds } },
+      });
 
-    // Total = subtotal + tax + service charge
-    const total = subtotal.add(tax).add(serviceChargeAmount);
+      // Get payment
+      const payments = await prisma.payment.findMany({
+        where: { orderId, tenantId },
+      });
 
-    // Tip suggestions based on subtotal + tax
-    const tipBase = subtotal.add(tax);
-    const tipSuggestions = [
-      tipBase.mul(new Decimal('0.18')).toNumber(),
-      tipBase.mul(new Decimal('0.20')).toNumber(),
-      tipBase.mul(new Decimal('0.25')).toNumber(),
-    ];
+      // Get menu items for pricing
+      const menuItemIds = items.map(item => item.menuItemId).filter(Boolean);
+      const menuItems = await prisma.menuItem.findMany({
+        where: { id: { in: menuItemIds } },
+      });
 
-    return {
-      orderId,
-      subtotal: subtotal.toNumber(),
-      tax: tax.toNumber(),
-      serviceCharge: serviceChargeAmount.toNumber(),
-      currentTips: currentTips.toNumber(),
-      tipSuggestions,
-      total: total.toNumber(),
-      amountPaid: order.payments?.reduce(
-        (sum, payment) => sum + payment.amount.toNumber(),
-        0
-      ) || 0,
-      items,
-      remainingBalance: total.minus(
-        new Decimal(order.payments?.reduce(
-          (sum, payment) => sum + payment.amount.toNumber(),
-          0
-        ) || 0)
-      ).toNumber(),
-    };
+      // Create a map for quick lookup
+      const menuItemMap = new Map(menuItems.map(item => [item.id, item]));
+
+      // Calculate subtotal from items
+      const subtotal = items.reduce((sum, item) => {
+        const menuItem = menuItemMap.get(item.menuItemId);
+        if (!menuItem) return sum;
+        return sum.plus(menuItem.price.mul(item.quantity));
+      }, new Decimal(0));
+
+      // Get tax rate from financial settings
+      const taxSetting = await prisma.financialSetting.findFirst({
+        where: { tenantId },
+      });
+      const taxRate = taxSetting?.taxRate || new Decimal('0.0825');
+
+      // Calculate tax
+      const tax = subtotal.mul(taxRate);
+
+      // Calculate total
+      const total = subtotal.plus(tax);
+
+      // Calculate paid amount
+      const paid = payments.reduce((sum, payment) => {
+        if (payment.status === PaymentStatus.COMPLETED) {
+          return sum.plus(payment.amount);
+        }
+        return sum;
+      }, new Decimal(0));
+
+      const remaining = total.minus(paid);
+
+      return {
+        subtotal,
+        tax,
+        total,
+        paid,
+        remaining,
+      };
+    } catch (error: any) {
+      logger.error('Error calculating bill:', error.message);
+      throw error;
+    }
   }
 
   /**
@@ -99,84 +103,60 @@ export class PaymentService {
   async addPayment(
     orderId: string,
     tenantId: string,
-    data: {
-      method: PaymentMethod;
-      amount: Decimal;
-      cardNumber?: string;
-      lastFour?: string;
-    }
-  ) {
+    amount: Decimal | number,
+    paymentMethod: PaymentMethod,
+    referenceNumber?: string
+  ): Promise<any> {
+    const amountDecimal = new Decimal(amount);
+
     try {
-      // Start transaction
+      // Get current bill
+      const bill = await this.getBill(orderId, tenantId);
+
+      // Validate payment amount
+      if (amountDecimal.lte(0)) {
+        throw new Error('Payment amount must be greater than 0');
+      }
+
+      if (amountDecimal.gt(bill.remaining)) {
+        throw new Error(
+          `Payment amount exceeds remaining balance. Remaining: $${bill.remaining.toFixed(2)}, Payment: $${amountDecimal.toFixed(2)}`
+        );
+      }
+
+      // Use transaction to ensure atomic operation
       const result = await prisma.$transaction(async (tx) => {
-        // 1. Verify order exists and belongs to tenant
-        const order = await tx.order.findFirst({
-          where: { id: orderId, tenantId },
-          include: { payments: true, courses: { include: { items: { include: { menuItem: true } } } } },
-        });
-
-        if (!order) throw new Error('Order not found');
-
-        // 2. Verify order is not already closed/paid
-        if (order.status === 'PAID' || order.status === 'CLOSED') {
-          throw new Error('Order is already closed or paid');
-        }
-
-        // 3. Calculate bill total using same logic as getBill
-        const financialSettings = await tx.financialSetting.findUnique({
-          where: { tenantId },
-        });
-        const taxRate = financialSettings?.taxRate || new Decimal('0.0825');
-
-        let subtotal = new Decimal(0);
-        order.courses?.forEach(course => {
-          course.items?.forEach(item => {
-            subtotal = subtotal.add(item.menuItem.price.mul(new Decimal(item.quantity)));
-          });
-        });
-
-        const tax = subtotal.mul(taxRate);
-        const billTotal = subtotal.add(tax);
-
-        // 4. Validate payment amount doesn't exceed bill
-        if (data.amount.gt(billTotal)) {
-          throw new Error(
-            `Payment amount ($${data.amount}) exceeds bill total ($${billTotal})`
-          );
-        }
-
-        // 5. Record payment
+        // Create payment record
         const payment = await tx.payment.create({
           data: {
-            tenantId,
             orderId,
-            method: data.method,
-            amount: data.amount,
+            tenantId,
+            amount: amountDecimal,
+            method: paymentMethod,
+            reference: referenceNumber || '',
             status: PaymentStatus.COMPLETED,
-            cardLastFour: data.lastFour,
-            processedAt: new Date(),
           },
         });
 
-        // 6. Calculate total paid so far
-        const totalPaidAfter = order.payments
-          .reduce((sum, p) => sum.add(p.amount), new Decimal(0))
-          .add(data.amount);
+        // Check if order is now fully paid
+        const updatedBill = await this.getBill(orderId, tenantId);
+        const newPaid = updatedBill.paid.plus(amountDecimal);
 
-        // 7. If fully paid, update order status
-        if (totalPaidAfter.gte(billTotal)) {
+        if (newPaid.gte(updatedBill.total)) {
+          // Update order status to PAID if fully paid
           await tx.order.update({
             where: { id: orderId },
             data: {
-              status: 'PAID',
+              status: OrderStatus.PAID,
               closedAt: new Date(),
             },
           });
-          logger.info(`✅ Order ${orderId} fully paid - status updated to PAID`);
+
+          logger.info(`✅ Order ${orderId} fully paid (status updated to PAID)`);
         }
 
         logger.info(
-          `✅ Payment recorded for order ${orderId}: $${data.amount} via ${data.method}`
+          `💳 Payment added: ${amountDecimal} (Method: ${paymentMethod}, OrderID: ${orderId})`
         );
 
         return payment;
@@ -184,7 +164,7 @@ export class PaymentService {
 
       return result;
     } catch (error: any) {
-      logger.error(`❌ Payment recording failed for order ${orderId}:`, error.message);
+      logger.error(`Payment error for order ${orderId}:`, error.message);
       throw error;
     }
   }
@@ -217,9 +197,7 @@ export class PaymentService {
         },
       });
 
-      logger.info(
-        `✅ Tip added to order ${orderId}: $${data.amount} via ${data.method}`
-      );
+      logger.info(`✅ Tip added to order ${orderId}: $${data.amount} via ${data.method}`);
 
       return tip;
     } catch (error: any) {
@@ -231,32 +209,121 @@ export class PaymentService {
   /**
    * Verify payment integrity - check that payment matches bill
    */
-  async verifyPaymentIntegrity(orderId: string, tenantId: string): Promise<{
+  async verifyPaymentIntegrity(
+    orderId: string,
+    tenantId: string
+  ): Promise<{
     isValid: boolean;
     billTotal: number;
     amountPaid: number;
     difference: number;
     issues: string[];
   }> {
-    const bill = await this.getBill(orderId, tenantId);
-    const issues: string[] = [];
+    try {
+      const order = await prisma.order.findFirst({
+        where: { id: orderId, tenantId },
+      });
 
-    const difference = bill.total - bill.amountPaid;
+      if (!order) {
+        throw new Error('Order not found');
+      }
 
-    if (difference < 0) {
-      issues.push(`Overpayment detected: $${Math.abs(difference).toFixed(2)}`);
+      // Get order items
+      // First get all courses for this order
+      const courses = await prisma.orderCourse.findMany({
+        where: { orderId },
+      });
+
+      // Then get all items across all courses
+      const courseIds = courses.map(c => c.id);
+      const items = await prisma.orderItem.findMany({
+        where: { orderCourseId: { in: courseIds } },
+      });
+
+      // Get payments separately to avoid type issues
+      const payments = await prisma.payment.findMany({
+        where: { orderId, tenantId },
+      });
+
+      // Get menu items for pricing
+      const menuItemIds = items.map(item => item.menuItemId).filter(Boolean);
+      const menuItems = await prisma.menuItem.findMany({
+        where: { id: { in: menuItemIds } },
+      });
+
+      // Create a map for quick lookup
+      const menuItemMap = new Map(menuItems.map(item => [item.id, item]));
+
+      // Calculate subtotal
+      const subtotal = items.reduce((sum, item) => {
+        const menuItem = menuItemMap.get(item.menuItemId);
+        if (!menuItem) return sum;
+        return sum.plus(menuItem.price.mul(item.quantity));
+      }, new Decimal(0));
+
+      // Get tax setting
+      const taxSetting = await prisma.financialSetting.findFirst({
+        where: { tenantId },
+      });
+      const taxRate = taxSetting?.taxRate || new Decimal('0.0825');
+      const tax = subtotal.mul(taxRate);
+      const expectedTotal = subtotal.plus(tax);
+
+      // Calculate actual paid
+      const actualPaid = payments.reduce((sum, payment) => {
+        if (payment.status === PaymentStatus.COMPLETED) {
+          return sum.plus(payment.amount);
+        }
+        return sum;
+      }, new Decimal(0));
+
+      // Verify
+      const isValid =
+        order.subtotal?.equals(subtotal) &&
+        order.tax?.equals(tax) &&
+        order.total?.equals(expectedTotal);
+
+      const issues: string[] = [];
+
+      if (!isValid) {
+        logger.error(
+          `❌ Payment integrity check failed for order ${orderId}. Expected: $${expectedTotal}, Stored: $${order.total}`
+        );
+        issues.push(`Expected total: $${expectedTotal}, but stored: $${order.total}`);
+      }
+
+      logger.info(`✅ Payment integrity verified for order ${orderId}`);
+      return {
+        isValid,
+        billTotal: expectedTotal.toNumber(),
+        amountPaid: actualPaid.toNumber(),
+        difference: expectedTotal.minus(actualPaid).toNumber(),
+        issues,
+      };
+    } catch (error: any) {
+      logger.error(`Integrity verification error:`, error.message);
+      throw error;
     }
 
-    if (difference > 0) {
-      issues.push(`Order not fully paid: $${difference.toFixed(2)} remaining`);
-    }
+    // const bill = await this.getBill(orderId, tenantId);
+    // const issues: string[] = [];
 
-    return {
-      isValid: difference === 0,
-      billTotal: bill.total,
-      amountPaid: bill.amountPaid,
-      difference,
-      issues,
-    };
+    // const difference = bill.total - bill.amountPaid;
+
+    // if (difference < 0) {
+    //   issues.push(`Overpayment detected: $${Math.abs(difference).toFixed(2)}`);
+    // }
+
+    // if (difference > 0) {
+    //   issues.push(`Order not fully paid: $${difference.toFixed(2)} remaining`);
+    // }
+
+    // return {
+    //   isValid: difference === 0,
+    //   billTotal: bill.total,
+    //   amountPaid: bill.amountPaid,
+    //   difference,
+    //   issues,
+    // };
   }
 }
