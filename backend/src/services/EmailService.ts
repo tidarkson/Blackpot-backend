@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { config } from '../config/environment';
-import { logger } from '../config/logger';
+import logger from '../config/logger';
 
 // Email templates
 const emailTemplates = {
@@ -99,8 +99,26 @@ export class EmailService {
           pass: process.env.SENDGRID_API_KEY || '',
         },
       });
+    } else if (process.env.EMAIL_PROVIDER === 'ETHEREAL') {
+      // Ethereal test email service
+      this.transporter = nodemailer.createTransport({
+        host: 'smtp.ethereal.email',
+        port: 587,
+        secure: false,
+        auth: {
+          user: process.env.ETHEREAL_USER,
+          pass: process.env.ETHEREAL_PASSWORD,
+        },
+      });
+    } else if (process.env.EMAIL_PROVIDER === 'TEST') {
+      // Test mode - emails logged to console instead of sent
+      this.transporter = nodemailer.createTransport({
+        streamTransport: true,
+        buffer: true,
+        newline: 'unix',
+      });
     } else {
-      // Default: Gmail or custom SMTP
+      // Default: Gmail
       this.transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {

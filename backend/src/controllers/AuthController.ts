@@ -188,7 +188,8 @@ export class AuthController {
       await emailService.sendPasswordResetEmail(
         email,
         resetToken,
-        'User' // Get actual name from user if exists
+        'User', // Get actual name from user if exists
+        new Date(Date.now() + 24 * 60 * 60 * 1000) // Token expires in 24 hours
       );
 
       // Always return success message (don't reveal if email exists)
