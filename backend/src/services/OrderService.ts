@@ -2,11 +2,14 @@ import { PrismaClient, OrderStatus, CourseType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import logger from '../config/logger';
 
-const prisma = new PrismaClient();
-
 export class OrderService {
+  private prisma: PrismaClient;
 
-    private validTransitions: Record<OrderStatus, OrderStatus[]> = {
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient || new PrismaClient();
+  }
+
+  private validTransitions: Record<OrderStatus, OrderStatus[]> = {
     OPEN: [OrderStatus.IN_PROGRESS, OrderStatus.CLOSED, OrderStatus.CANCELLED],
     IN_PROGRESS: [OrderStatus.READY, OrderStatus.OPEN, OrderStatus.CLOSED, OrderStatus.CANCELLED],
     READY: [OrderStatus.COMPLETED, OrderStatus.IN_PROGRESS, OrderStatus.CLOSED, OrderStatus.CANCELLED],
@@ -18,18 +21,17 @@ export class OrderService {
 
   async createOrder(
     tenantId: string,
-    data: {
-      tableId: string;
-      serverId: string;
-      guestCount: number;
-    }
+    tableId: string,
+    serverId: string,
+    guestCount: number,
+    userId: string
   ) {
-    return prisma.order.create({
+    return this.prisma.order.create({
       data: {
-        tableId: data.tableId,
-        serverId: data.serverId,
+        tableId,
+        serverId,
         tenantId,
-        guestCount: data.guestCount,
+        guestCount,
         status: OrderStatus.OPEN,
         subtotal: new Decimal(0),
         tax: new Decimal(0),
@@ -45,7 +47,7 @@ export class OrderService {
   }
 
   async getOrderById(orderId: string, tenantId: string) {
-    return prisma.order.findFirst({
+    return this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
       include: {
         courses: {
@@ -61,7 +63,7 @@ export class OrderService {
   }
 
   async getOrdersByTable(tableId: string, tenantId: string) {
-    return prisma.order.findMany({
+    return this.prisma.order.findMany({
       where: { tableId, tenantId, status: OrderStatus.OPEN },
       include: {
         courses: { include: { items: { include: { menuItem: true } } } },
@@ -81,7 +83,7 @@ export class OrderService {
     const order = await this.getOrderById(orderId, tenantId);
     if (!order) throw new Error('Order not found');
 
-    return prisma.orderCourse.create({
+    return this.prisma.orderCourse.create({
       data: {
         tenantId,
         orderId,
@@ -98,7 +100,7 @@ export class OrderService {
     quantity: number,
     specialNotes?: string
   ) {
-    return prisma.orderItem.create({
+    return this.prisma.orderItem.create({
       data: {
         tenantId,
         orderCourseId,
@@ -116,7 +118,7 @@ export class OrderService {
     tenantId: string
   ): Promise<boolean> {
     try {
-      const order = await prisma.order.findFirst({
+      const order = await this.prisma.order.findFirst({
         where: { id: orderId, tenantId },
         include: {
           courses: true,
@@ -140,7 +142,7 @@ export class OrderService {
       // Additional validations for specific transitions
       if (newStatus === OrderStatus.READY) {
         // All courses must have items before marking order as READY
-        const coursesWithItems = await prisma.orderCourse.findMany({
+        const coursesWithItems = await this.prisma.orderCourse.findMany({
           where: { orderId },
           include: { items: true },
         });
@@ -181,7 +183,7 @@ export class OrderService {
       await this.validateStateTransition(orderId, newStatus, tenantId);
 
       // Update status
-      const updatedOrder = await prisma.order.update({
+      const updatedOrder = await this.prisma.order.update({
         where: { id: orderId },
         data: {
           status: newStatus,
@@ -211,7 +213,7 @@ export class OrderService {
     tenantId: string
   ): Promise<any> {
     try {
-      const order = await prisma.order.findFirst({
+      const order = await this.prisma.order.findFirst({
         where: { id: orderId, tenantId },
       });
 
@@ -228,7 +230,7 @@ export class OrderService {
       }
 
       // Verify the course exists and belongs to this order
-      const course = await prisma.orderCourse.findFirst({
+      const course = await this.prisma.orderCourse.findFirst({
         where: { id: courseId, orderId },
       });
 
@@ -237,7 +239,7 @@ export class OrderService {
       }
 
       // Create order item
-      const orderItem = await prisma.orderItem.create({
+      const orderItem = await this.prisma.orderItem.create({
         data: {
           tenantId,
           orderCourseId: courseId,
@@ -260,7 +262,7 @@ export class OrderService {
 
   async getOrderDetails(orderId: string, tenantId: string): Promise<any> {
     try {
-      const order = await prisma.order.findFirst({
+      const order = await this.prisma.order.findFirst({
         where: { id: orderId, tenantId },
         include: {
           table: true,
@@ -296,6 +298,156 @@ export class OrderService {
       return await this.updateOrderStatus(orderId, OrderStatus.CLOSED, tenantId);
     } catch (error: any) {
       logger.error(`Error closing order:`, error.message);
+      throw error;
+    }
+  }
+
+  async updateOrder(orderId: string, tenantId: string, data: any): Promise<any> {
+    try {
+      const order = await this.getOrderById(orderId, tenantId);
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      const updated = await this.prisma.order.update({
+        where: { id: orderId },
+        data: {
+          guestCount: data.guestCount || order.guestCount,
+          serverId: data.serverId || order.serverId,
+        },
+        include: {
+          courses: true,
+          payments: true,
+          table: true,
+          server: true,
+        },
+      });
+
+      logger.info(`Order updated: ${orderId}`, { tenantId });
+      return updated;
+    } catch (error: any) {
+      logger.error(`Error updating order:`, error.message);
+      throw error;
+    }
+  }
+
+  async cancelOrder(orderId: string, tenantId: string): Promise<any> {
+    try {
+      const order = await this.getOrderById(orderId, tenantId);
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      if (order.status === OrderStatus.PAID || order.status === OrderStatus.CLOSED) {
+        throw new Error('Cannot cancel a paid or closed order');
+      }
+
+      return await this.updateOrderStatus(orderId, OrderStatus.CANCELLED, tenantId);
+    } catch (error: any) {
+      logger.error(`Error cancelling order:`, error.message);
+      throw error;
+    }
+  }
+
+  async updateOrderItem(itemId: string, tenantId: string, data: any): Promise<any> {
+    try {
+      const item = await this.prisma.orderItem.findFirst({
+        where: { id: itemId, tenantId },
+      });
+
+      if (!item) {
+        throw new Error('Order item not found');
+      }
+
+      const updated = await this.prisma.orderItem.update({
+        where: { id: itemId },
+        data: {
+          quantity: data.quantity || item.quantity,
+          specialNotes: data.notes || item.specialNotes,
+        },
+        include: { menuItem: true },
+      });
+
+      logger.info(`Order item updated: ${itemId}`, { tenantId });
+      return updated;
+    } catch (error: any) {
+      logger.error(`Error updating order item:`, error.message);
+      throw error;
+    }
+  }
+
+  async removeOrderItem(itemId: string, tenantId: string): Promise<boolean> {
+    try {
+      const item = await this.prisma.orderItem.findFirst({
+        where: { id: itemId, tenantId },
+      });
+
+      if (!item) {
+        throw new Error('Order item not found');
+      }
+
+      await this.prisma.orderItem.delete({
+        where: { id: itemId },
+      });
+
+      logger.info(`Order item removed: ${itemId}`, { tenantId });
+      return true;
+    } catch (error: any) {
+      logger.error(`Error removing order item:`, error.message);
+      throw error;
+    }
+  }
+
+  async listOrders(
+    tenantId: string,
+    filters: {
+      status?: OrderStatus;
+      tableId?: string;
+      serverId?: string;
+      page?: number;
+      pageSize?: number;
+      startDate?: Date;
+      endDate?: Date;
+    }
+  ): Promise<{ data: any[]; total: number }> {
+    try {
+      const page = filters.page || 1;
+      const pageSize = filters.pageSize || 10;
+      const skip = (page - 1) * pageSize;
+
+      const where: any = { tenantId };
+
+      if (filters.status) where.status = filters.status;
+      if (filters.tableId) where.tableId = filters.tableId;
+      if (filters.serverId) where.serverId = filters.serverId;
+      if (filters.startDate || filters.endDate) {
+        where.openedAt = {};
+        if (filters.startDate) where.openedAt.gte = filters.startDate;
+        if (filters.endDate) where.openedAt.lte = filters.endDate;
+      }
+
+      const [data, total] = await Promise.all([
+        this.prisma.order.findMany({
+          where,
+          include: {
+            courses: {
+              include: { items: { include: { menuItem: true } } },
+            },
+            table: true,
+            server: true,
+            payments: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: pageSize,
+        }),
+        this.prisma.order.count({ where }),
+      ]);
+
+      logger.info(`Orders listed`, { tenantId, count: data.length, total });
+      return { data, total };
+    } catch (error: any) {
+      logger.error(`Error listing orders:`, error.message);
       throw error;
     }
   }

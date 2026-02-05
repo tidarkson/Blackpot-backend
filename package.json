@@ -39,6 +39,7 @@
     "nodemailer": "^7.0.13",
     "socket.io": "^4.8.3",
     "stripe": "^20.2.0",
+    "supertest": "^7.2.2",
     "winston": "^3.19.0",
     "zod": "^4.3.6"
   },
@@ -50,6 +51,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.19.30",
     "@types/nodemailer": "^7.0.9",
+    "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
     "eslint": "^9.39.2",

@@ -1,9 +1,13 @@
 import { PrismaClient, OrderStatus, CourseType } from '@prisma/client';
 import logger from '../config/logger';
 
-const prisma = new PrismaClient();
-
 export class KitchenService {
+  private prisma: PrismaClient;
+
+  constructor(prismaClient?: PrismaClient) {
+    this.prisma = prismaClient || new PrismaClient();
+  }
+
   /**
    * Kitchen tracks OrderItem preparation, not OrderCourse
    * OrderCourse is just grouping by meal type (APPETIZER, MAIN, DESSERT)
@@ -20,7 +24,7 @@ export class KitchenService {
    * Get all items pending for a kitchen station
    */
   async getOrdersByStation(stationId: string, tenantId: string) {
-    return prisma.orderItem.findMany({
+    return this.prisma.orderItem.findMany({
       where: {
         orderCourse: {
           kitchenStationId: stationId,
@@ -47,7 +51,7 @@ export class KitchenService {
    * Get all pending items across all stations
    */
   async getPendingOrders(tenantId: string) {
-    return prisma.orderItem.findMany({
+    return this.prisma.orderItem.findMany({
       where: {
         preparedAt: null,
         orderCourse: {
@@ -72,7 +76,7 @@ export class KitchenService {
    * Mark an order item as prepared
    */
   async completeItem(itemId: string, tenantId: string) {
-    const item = await prisma.orderItem.findUnique({
+    const item = await this.prisma.orderItem.findUnique({
       where: { id: itemId },
       include: {
         orderCourse: {
@@ -85,7 +89,7 @@ export class KitchenService {
       throw new Error('Item not found');
     }
 
-    return prisma.orderItem.update({
+    return this.prisma.orderItem.update({
       where: { id: itemId },
       data: { preparedAt: new Date() },
       include: { menuItem: true },
@@ -96,7 +100,7 @@ export class KitchenService {
    * Get kitchen metrics for the last hour
    */
   async getKitchenMetrics(tenantId: string) {
-    const lastHourItems = await prisma.orderItem.findMany({
+    const lastHourItems = await this.prisma.orderItem.findMany({
       where: {
         preparedAt: {
           gte: new Date(Date.now() - 60 * 60 * 1000),
@@ -113,7 +117,7 @@ export class KitchenService {
       return sum + prepTime;
     }, 0) / Math.max(lastHourItems.length, 1);
 
-    const pendingCount = await prisma.orderItem.count({
+    const pendingCount = await this.prisma.orderItem.count({
       where: {
         preparedAt: null,
         orderCourse: {
@@ -135,7 +139,7 @@ export class KitchenService {
    */
   async fireOrderItem(itemId: string, tenantId: string): Promise<any> {
     try {
-      const item = await prisma.orderItem.findFirst({
+      const item = await this.prisma.orderItem.findFirst({
         where: { id: itemId },
         include: {
           orderCourse: {
@@ -157,7 +161,7 @@ export class KitchenService {
         throw new Error(`Item already prepared at ${item.preparedAt}`);
       }
 
-      const updated = await prisma.orderItem.update({
+      const updated = await this.prisma.orderItem.update({
         where: { id: itemId },
         data: {
           preparedAt: new Date(),
@@ -185,7 +189,7 @@ export class KitchenService {
    */
   async serveItem(itemId: string, tenantId: string): Promise<any> {
     try {
-      const item = await prisma.orderItem.findFirst({
+      const item = await this.prisma.orderItem.findFirst({
         where: { id: itemId },
         include: {
           orderCourse: {
@@ -207,7 +211,7 @@ export class KitchenService {
         throw new Error('Item must be prepared before serving');
       }
 
-      const updated = await prisma.orderItem.update({
+      const updated = await this.prisma.orderItem.update({
         where: { id: itemId },
         data: {
           servedAt: new Date(),
@@ -246,7 +250,7 @@ export class KitchenService {
         whereClause.orderCourse.kitchenStationId = kitchenStationId;
       }
 
-      const allItems = await prisma.orderItem.findMany({
+      const allItems = await this.prisma.orderItem.findMany({
         where: whereClause,
         include: {
           menuItem: true,
@@ -288,7 +292,7 @@ export class KitchenService {
    */
   async calculatePrepTime(itemId: string, tenantId: string): Promise<number> {
     try {
-      const item = await prisma.orderItem.findFirst({
+      const item = await this.prisma.orderItem.findFirst({
         where: { id: itemId },
         include: {
           orderCourse: {
@@ -331,7 +335,7 @@ export class KitchenService {
    */
   async getOrderReadyStatus(orderId: string, tenantId: string): Promise<any> {
     try {
-      const items = await prisma.orderItem.findMany({
+      const items = await this.prisma.orderItem.findMany({
         where: {
           orderCourse: {
             orderId,
@@ -365,6 +369,56 @@ export class KitchenService {
       return status;
     } catch (error: any) {
       logger.error('Error getting order ready status:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get items by status
+   */
+  async getItemsByStatus(
+    tenantId: string,
+    status: string,
+    stationId?: string,
+    limit: number = 50
+  ): Promise<any[]> {
+    try {
+      const whereClause: any = {
+        orderCourse: {
+          order: { tenantId },
+        },
+      };
+
+      if (stationId) {
+        whereClause.orderCourse.kitchenStationId = stationId;
+      }
+
+      if (status === 'PENDING') {
+        whereClause.preparedAt = null;
+      } else if (status === 'PREPARED') {
+        whereClause.preparedAt = { not: null };
+        whereClause.servedAt = null;
+      } else if (status === 'SERVED') {
+        whereClause.servedAt = { not: null };
+      }
+
+      return await this.prisma.orderItem.findMany({
+        where: whereClause,
+        include: {
+          menuItem: true,
+          orderCourse: {
+            include: {
+              order: {
+                include: { table: true },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: limit,
+      });
+    } catch (error: any) {
+      logger.error('Error getting items by status:', error.message);
       throw error;
     }
   }

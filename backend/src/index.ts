@@ -11,6 +11,10 @@ import reconciliationRoutes from './routes/reconciliation';
 import shiftRoutes from './routes/shift';
 import reportRoutes from './routes/reports';
 import menuRoutes from './routes/menu';
+import orderRoutes from './routes/order';
+import kitchenRoutes from './routes/kitchen';
+import tableRoutes from './routes/table';
+import splitRoutes from './routes/split';
 import { apiLimiter } from './middleware/rateLimiter';
 
 const app = express();
@@ -47,6 +51,10 @@ app.use(`${config.API_PREFIX}/reconciliation`, reconciliationRoutes);
 app.use(`${config.API_PREFIX}/shifts`, shiftRoutes);
 app.use(`${config.API_PREFIX}/reports`, reportRoutes);
 app.use(`${config.API_PREFIX}/menus`, menuRoutes);
+app.use(`${config.API_PREFIX}/orders`, orderRoutes);
+app.use(`${config.API_PREFIX}/kitchen`, kitchenRoutes);
+app.use(`${config.API_PREFIX}/tables`, tableRoutes);
+app.use(`${config.API_PREFIX}`, splitRoutes);
 
 // 404 handler
 app.use((req, res) => {
