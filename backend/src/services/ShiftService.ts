@@ -18,8 +18,11 @@ export class ShiftService {
         data: {
           userId,
           tenantId,
-          role,
-          startAt: new Date(),
+          roleAssigned: role,
+          scheduledDate: new Date(),
+          scheduledStart: new Date(),
+          scheduledEnd: new Date(),
+          clockInTime: new Date(),
         },
       });
 
@@ -43,9 +46,9 @@ export class ShiftService {
           where: {
             userId,
             tenantId,
-            endAt: null,
+            clockOutTime: null,
           },
-          orderBy: { startAt: 'desc' },
+          orderBy: { scheduledStart: 'desc' },
         });
 
         if (!shift) {
@@ -56,7 +59,7 @@ export class ShiftService {
         const endedShift = await tx.shift.update({
           where: { id: shift.id },
           data: {
-            endAt: new Date(),
+            clockOutTime: new Date(),
           },
         });
 
@@ -64,7 +67,7 @@ export class ShiftService {
         const shiftRevenue = await this.calculateShiftRevenue(
           tx,
           userId,
-          shift.startAt,
+          shift.scheduledStart,
           new Date(),
           tenantId
         );
@@ -267,7 +270,7 @@ export class ShiftService {
       // Get server's orders from last shift
       const shift = await tx.shift.findFirst({
         where: { userId, tenantId },
-        orderBy: { startAt: 'desc' },
+        orderBy: { scheduledStart: 'desc' },
       });
 
       if (!shift) {
@@ -279,8 +282,8 @@ export class ShiftService {
           serverId: userId,
           tenantId,
           closedAt: {
-            gte: shift.startAt,
-            lte: shift.endAt || new Date(),
+            gte: shift.scheduledStart,
+            lte: shift.scheduledEnd || new Date(),
           },
         },
         include: {

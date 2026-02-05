@@ -336,4 +336,62 @@ describe('Order Management API Integration Tests', () => {
       expect(response.status).toBe(400);
     });
   });
+
+  describe('Reservation Workflow Integration', () => {
+  it('should complete full reservation lifecycle', async () => {
+    // 1. Create (PENDING)
+    const created = await ReservationService.createReservation(
+      { ...reservationData },
+      testTenantId,
+      testUserId
+    );
+
+    // 2. Confirm (CONFIRMED)
+    const confirmed = await ReservationService.updateReservationStatus(
+      created.id,
+      ReservationStatus.CONFIRMED,
+      testTenantId,
+      testUserId
+    );
+
+    // 3. Checkin/Seat (SEATED)
+    const seated = await ReservationService.seatReservation(
+      confirmed.id,
+      testTableId,
+      testTenantId,
+      testUserId
+    );
+
+    // 4. Complete (COMPLETED)
+    const completed = await ReservationService.updateReservationStatus(
+      seated.reservation.id,
+      ReservationStatus.COMPLETED,
+      testTenantId,
+      testUserId
+    );
+
+    expect(completed.status).toBe(ReservationStatus.COMPLETED);
+  });
+
+  it('should prevent double-bookings', async () => {
+    // Create first reservation
+    const first = await ReservationService.createReservation(
+      { ...reservationData, tableId: testTableId },
+      testTenantId,
+      testUserId
+    );
+
+    // Try to create overlapping reservation on same table
+    // Should fail with AvailabilityService check
+    const available = await AvailabilityService.isTableAvailable(
+      testTableId,
+      reservationData.reservedAt,
+      '19:00',
+      reservationData.guestCount,
+      testTenantId
+    );
+
+    expect(available).toBe(false);
+  });
+});
 });

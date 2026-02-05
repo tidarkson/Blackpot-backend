@@ -1,6 +1,8 @@
 import { PrismaClient, OrderStatus, CourseType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import logger from '../config/logger';
+import CustomerService from './CustomerService';
+import InventoryService from './InventoryService';
 
 export class OrderService {
   private prisma: PrismaClient;
@@ -26,24 +28,70 @@ export class OrderService {
     guestCount: number,
     userId: string
   ) {
-    return this.prisma.order.create({
-      data: {
-        tableId,
-        serverId,
-        tenantId,
-        guestCount,
-        status: OrderStatus.OPEN,
-        subtotal: new Decimal(0),
-        tax: new Decimal(0),
-        total: new Decimal(0),
-      },
-      include: {
-        courses: true,
-        payments: true,
-        table: true,
-        server: true,
-      },
-    });
+    try {
+      // PHASE 2: Try to link customer from existing reservation for this table
+      let customerId: string | undefined = undefined;
+
+      // Look for active reservation on this table for today
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      try {
+        const reservation = await this.prisma.reservation.findFirst({
+          where: {
+            tenantId,
+            tableId,
+            status: {
+              in: ['CONFIRMED', 'SEATED'],
+            },
+            reservedAt: {
+              gte: today,
+              lt: tomorrow,
+            },
+          },
+          orderBy: {
+            reservedAt: 'desc',
+          },
+        });
+
+        if (reservation?.customerId) {
+          customerId = reservation.customerId;
+          logger.info(
+            `🔗 Linked customer ${customerId} from reservation to order`
+          );
+        }
+      } catch (reservationError) {
+        logger.warn(
+          `Failed to link customer from reservation: ${reservationError}`
+        );
+      }
+
+      return this.prisma.order.create({
+        data: {
+          tableId,
+          serverId,
+          tenantId,
+          customerId,
+          guestCount,
+          status: OrderStatus.OPEN,
+          subtotal: new Decimal(0),
+          tax: new Decimal(0),
+          total: new Decimal(0),
+        },
+        include: {
+          courses: true,
+          payments: true,
+          table: true,
+          server: true,
+          customer: true,
+        },
+      });
+    } catch (error) {
+      logger.error(`Error creating order:`, error);
+      throw error;
+    }
   }
 
   async getOrderById(orderId: string, tenantId: string) {
@@ -177,10 +225,58 @@ export class OrderService {
     }
   }
 
-  async updateOrderStatus(orderId: string, newStatus: OrderStatus, tenantId: string): Promise<any> {
+  async updateOrderStatus(orderId: string, newStatus: OrderStatus, tenantId: string, userId?: string): Promise<any> {
     try {
       // Validate transition
       await this.validateStateTransition(orderId, newStatus, tenantId);
+
+      // Get the full order with items
+      const order = await this.prisma.order.findFirst({
+        where: { id: orderId, tenantId },
+        include: {
+          courses: {
+            include: { 
+              items: {
+                include: { menuItem: true }
+              } 
+            },
+          },
+        },
+      });
+
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      // If transitioning to COMPLETED, deduct inventory based on recipes
+      if (newStatus === OrderStatus.COMPLETED && userId) {
+        try {
+          // For each menu item in the order, deduct its recipe ingredients
+          for (const course of order.courses) {
+            for (const item of course.items) {
+              try {
+                await InventoryService.deductMenuItemInventory(
+                  tenantId,
+                  item.menuItemId,
+                  item.quantity,
+                  orderId,
+                  userId
+                );
+              } catch (itemError: any) {
+                logger.warn(
+                  `⚠️ Failed to deduct inventory for menu item ${item.menuItemId}: ${itemError.message}`
+                );
+                // Continue with other items, don't fail the order
+              }
+            }
+          }
+        } catch (inventoryError: any) {
+          logger.warn(
+            `⚠️ Inventory deduction warning for order ${orderId}: ${inventoryError.message}`
+          );
+          // Don't fail order completion, but log the warning
+        }
+      }
 
       // Update status
       const updatedOrder = await this.prisma.order.update({
@@ -295,7 +391,35 @@ export class OrderService {
 
   async closeOrder(orderId: string, tenantId: string): Promise<any> {
     try {
-      return await this.updateOrderStatus(orderId, OrderStatus.CLOSED, tenantId);
+      const order = await this.getOrderById(orderId, tenantId);
+      
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      const closedOrder = await this.updateOrderStatus(orderId, OrderStatus.CLOSED, tenantId);
+
+      // PHASE 2: Record customer metrics on order closure
+      if (order.customerId && closedOrder.total) {
+        try {
+          await CustomerService.recordOrderCompletion(
+            order.customerId,
+            closedOrder.total,
+            tenantId
+          );
+
+          logger.info(
+            `📊 Recorded order completion for customer ${order.customerId}`
+          );
+        } catch (customerError) {
+          logger.warn(
+            `Failed to record customer metrics for order ${orderId}: ${customerError}`
+          );
+          // Continue - don't fail order closure if customer metrics fail
+        }
+      }
+
+      return closedOrder;
     } catch (error: any) {
       logger.error(`Error closing order:`, error.message);
       throw error;

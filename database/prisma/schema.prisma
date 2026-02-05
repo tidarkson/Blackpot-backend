@@ -18,31 +18,39 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  locations           Location[]
-  menus               Menu[]
-  menuSections        MenuSection[]
-  menuItems           MenuItem[]
-  orderItems          OrderItem[]
-  reservations        Reservation[]
-  businessDays        BusinessDay[]
-  users               User[]
-  activityLogs        ActivityLog[]
-  notifications       Notification[]
-  financialSetting    FinancialSetting?
-  orders              Order[]
-  payments            Payment[]
-  tips                Tip[]
-  serviceCharges      ServiceCharge[]
-  receipts            Receipt[]
-  kitchenStations     KitchenStation[]
-  shifts              Shift[]
-  shiftReports        ShiftReport[]         @relation("ShiftReports")
-  reconciliationLogs  ReconciliationLog[]   @relation("ReconciliationLogs")
-  specialRequests     SpecialRequest[]
-  tableSections       TableSection[]
-  splitPayments       SplitPayment[]
-  splitPaymentItems   SplitPaymentItem[]
-  splitPaymentRecords SplitPaymentRecord[]
+  locations                   Location[]
+  customers                   Customer[]
+  menus                       Menu[]
+  menuSections                MenuSection[]
+  menuItems                   MenuItem[]
+  orderItems                  OrderItem[]
+  reservations                Reservation[]
+  businessDays                BusinessDay[]
+  users                       User[]
+  activityLogs                ActivityLog[]
+  notifications               Notification[]
+  financialSetting            FinancialSetting?
+  orders                      Order[]
+  payments                    Payment[]
+  tips                        Tip[]
+  serviceCharges              ServiceCharge[]
+  receipts                    Receipt[]
+  kitchenStations             KitchenStation[]
+  shifts                      Shift[]
+  shiftClockIns               ShiftClockIn[]
+  shiftTemplates              ShiftTemplate[]
+  coverageRequirements        CoverageRequirement[]
+  staffAvailabilityExceptions StaffAvailabilityException[]
+  laborCostReports            LaborCostReport[]
+  shiftConflicts              ShiftConflict[]
+  shiftReports                ShiftReport[]                @relation("ShiftReports")
+  reconciliationLogs          ReconciliationLog[]          @relation("ReconciliationLogs")
+  specialRequests             SpecialRequest[]
+  tableSections               TableSection[]
+  splitPayments               SplitPayment[]
+  splitPaymentItems           SplitPaymentItem[]
+  splitPaymentRecords         SplitPaymentRecord[]
+  waitlists                   Waitlist[]
 }
 
 model Location {
@@ -54,10 +62,66 @@ model Location {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  tables            Table[]
-  users             User[]
-  kitchenStations   KitchenStation[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tables          Table[]
+  users           User[]
+  kitchenStations KitchenStation[]
+}
+
+// ===============================
+// CUSTOMER MANAGEMENT
+// ===============================
+
+model Customer {
+  id       String @id @default(uuid())
+  tenantId String
+
+  // Basic info
+  name  String
+  phone String
+  email String?
+
+  // VIP Tracking
+  vipStatus Boolean  @default(false)
+  vipTier   VipTier? // 'GOLD' | 'PLATINUM' | 'DIAMOND'
+
+  // Metrics
+  lifetimeSpend Decimal   @default(0) @db.Decimal(12, 2)
+  visitCount    Int       @default(0)
+  lastVisit     DateTime?
+  averageCheck  Decimal   @default(0) @db.Decimal(10, 2)
+
+  // Preferences (JSON)
+  preferences Json?
+
+  // Metadata
+  tags  String[] @default([])
+  notes String?
+
+  // Timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relationships
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+  orders       Order[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+  @@index([vipStatus])
+  @@index([lifetimeSpend])
+  @@index([visitCount])
+  @@index([phone])
+  @@index([email])
+  @@index([deletedAt])
+}
+
+enum VipTier {
+  GOLD
+  PLATINUM
+  DIAMOND
 }
 
 // ===============================
@@ -80,19 +144,28 @@ model User {
   lastLoginAt         DateTime?
   lastLoginIp         String?
 
-  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  location         Location?       @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  serverOrders     Order[]         @relation("ServerOrders")
-  assignedOrders   Order[]         @relation("AssignedOrders")
-  tips             Tip[]
-  endOfDayCloses   EndOfDayClose[]
-  passwordResets   PasswordReset[]
-  shifts           Shift[]
-  assignedTables   Table[]         @relation("TableServers")
+  // Staff-specific fields
+  phone        String?
+  hourlyRate   Decimal?  @db.Decimal(10, 2)
+  hireDate     DateTime?
+  availability Json? // Day-based availability: { "monday": { "available": true, "startTime": "09:00", "endTime": "17:00" }, ... }
+
+  tenant                      Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location                    Location?                    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  serverOrders                Order[]                      @relation("ServerOrders")
+  assignedOrders              Order[]                      @relation("AssignedOrders")
+  tips                        Tip[]
+  endOfDayCloses              EndOfDayClose[]
+  passwordResets              PasswordReset[]
+  shifts                      Shift[]
+  shiftClockIns               ShiftClockIn[]
+  assignedTables              Table[]                      @relation("TableServers")
+  staffAvailabilityExceptions StaffAvailabilityException[]
 
   @@index([tenantId])
   @@index([role])
   @@index([email])
+  @@index([hireDate])
 }
 
 // ===============================
@@ -135,13 +208,17 @@ model MenuItem {
   description String?
   price       Decimal  @db.Decimal(10, 2)
   isAvailable Boolean  @default(true)
-  allergens   String?  // JSON array: ["PEANUTS", "DAIRY", "GLUTEN"]
+  allergens   String? // JSON array: ["PEANUTS", "DAIRY", "GLUTEN"]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  section    MenuSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  orderItems OrderItem[]
+  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  section           MenuSection           @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  orderItems        OrderItem[]
+  inventoryMappings MenuItemToInventory[]
+
+  @@index([tenantId])
+  @@index([sectionId])
 }
 
 // ===============================
@@ -151,7 +228,7 @@ model MenuItem {
 model TableSection {
   id        String   @id @default(uuid())
   tenantId  String
-  name      String   // "Main Dining", "Patio", "Private Room", etc.
+  name      String // "Main Dining", "Patio", "Private Room", etc.
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -163,26 +240,26 @@ model TableSection {
 }
 
 model Table {
-  id          String       @id @default(uuid())
-  tenantId    String
-  locationId  String
-  sectionId   String?
-  serverId    String?
-  name        String
-  capacity    Int
-  status      TableStatus  @default(AVAILABLE)
-  shape       TableShape   @default(RECTANGLE)
-  x           Float
-  y           Float
-  width       Float
-  height      Float
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  deletedAt   DateTime?
+  id         String      @id @default(uuid())
+  tenantId   String
+  locationId String
+  sectionId  String?
+  serverId   String?
+  name       String
+  capacity   Int
+  status     TableStatus @default(AVAILABLE)
+  shape      TableShape  @default(RECTANGLE)
+  x          Float
+  y          Float
+  width      Float
+  height     Float
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  deletedAt  DateTime?
 
-  location     Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  section      TableSection?  @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  server       User?          @relation("TableServers", fields: [serverId], references: [id], onDelete: SetNull)
+  location     Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  section      TableSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  server       User?         @relation("TableServers", fields: [serverId], references: [id], onDelete: SetNull)
   orders       Order[]
   reservations Reservation[]
 
@@ -196,6 +273,7 @@ model Table {
 model Reservation {
   id          String            @id @default(uuid())
   tenantId    String
+  customerId  String?
   tableId     String
   guestCount  Int
   guestName   String
@@ -208,8 +286,15 @@ model Reservation {
   updatedAt   DateTime          @updatedAt
   cancelledAt DateTime?
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  table  Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  table    Table     @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([customerId])
+  @@index([tableId])
+  @@index([status])
+  @@index([reservedAt])
 }
 
 // ===============================
@@ -217,39 +302,42 @@ model Reservation {
 // ===============================
 
 model Order {
-  id                       String      @id @default(uuid())
-  tenantId                 String
-  tableId                  String
-  serverId                 String
-  userId                   String?
-  shiftId                  String?
-  orderNumber              String?     // Format: YYYYMMDD-0001
-  status                   OrderStatus @default(OPEN)
-  guestCount               Int
-  subtotal                 Decimal     @default(0) @db.Decimal(10, 2)
-  tax                      Decimal     @default(0) @db.Decimal(10, 2)
-  total                    Decimal     @default(0) @db.Decimal(10, 2)
-  openedAt                 DateTime    @default(now())
-  closedAt                 DateTime?
-  lockedDate               DateTime?
-  reconciliationStatus     String?
-  createdAt                DateTime    @default(now())
-  updatedAt                DateTime    @updatedAt
-  deletedAt                DateTime?
+  id                   String      @id @default(uuid())
+  tenantId             String
+  customerId           String?
+  tableId              String
+  serverId             String
+  userId               String?
+  shiftId              String?
+  orderNumber          String? // Format: YYYYMMDD-0001
+  status               OrderStatus @default(OPEN)
+  guestCount           Int
+  subtotal             Decimal     @default(0) @db.Decimal(10, 2)
+  tax                  Decimal     @default(0) @db.Decimal(10, 2)
+  total                Decimal     @default(0) @db.Decimal(10, 2)
+  openedAt             DateTime    @default(now())
+  closedAt             DateTime?
+  lockedDate           DateTime?
+  reconciliationStatus String?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  deletedAt            DateTime?
 
-  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  table          Table          @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  server         User           @relation("ServerOrders", fields: [serverId], references: [id], onDelete: Cascade)
-  assignedUser   User?          @relation("AssignedOrders", fields: [userId], references: [id], onDelete: SetNull)
-  courses        OrderCourse[]
-  payments       Payment[]
-  tips           Tip[]
-  serviceCharge  ServiceCharge?
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  table           Table            @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  server          User             @relation("ServerOrders", fields: [serverId], references: [id], onDelete: Cascade)
+  assignedUser    User?            @relation("AssignedOrders", fields: [userId], references: [id], onDelete: SetNull)
+  courses         OrderCourse[]
+  payments        Payment[]
+  tips            Tip[]
+  serviceCharge   ServiceCharge?
   specialRequests SpecialRequest[]
-  splitPayments  SplitPayment[]
+  splitPayments   SplitPayment[]
 
   @@unique([tenantId, id]) // Composite for tenant isolation
   @@index([tenantId])
+  @@index([customerId])
   @@index([tableId])
   @@index([serverId])
   @@index([status])
@@ -280,21 +368,21 @@ model OrderCourse {
 }
 
 model OrderItem {
-  id            String    @id @default(uuid())
-  tenantId      String
-  orderCourseId String
-  menuItemId    String
-  quantity      Int
-  specialNotes  String?
+  id               String    @id @default(uuid())
+  tenantId         String
+  orderCourseId    String
+  menuItemId       String
+  quantity         Int
+  specialNotes     String?
   allergenWarnings String? // JSON array of allergens from MenuItem
-  preparedAt    DateTime?
-  servedAt      DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  preparedAt       DateTime?
+  servedAt         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  orderCourse OrderCourse @relation(fields: [orderCourseId], references: [id], onDelete: Cascade)
-  menuItem    MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orderCourse OrderCourse        @relation(fields: [orderCourseId], references: [id], onDelete: Cascade)
+  menuItem    MenuItem           @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   splitItems  SplitPaymentItem[]
 
   @@index([orderCourseId])
@@ -309,15 +397,15 @@ model OrderItem {
 // ===============================
 
 model SpecialRequest {
-  id          String   @id @default(uuid())
+  id          String               @id @default(uuid())
   tenantId    String
   orderId     String
   title       String
   description String?
-  priority    Priority @default(MEDIUM)
+  priority    Priority             @default(MEDIUM)
   status      SpecialRequestStatus @default(OPEN)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -412,24 +500,24 @@ model Receipt {
 // ===============================
 
 model SplitPayment {
-  id              String        @id @default(uuid())
-  tenantId        String
-  orderId         String
-  billNumber      Int                           // 1, 2, 3, etc. for this order
-  personNumber    Int                           // Person 1, Person 2, etc.
-  subtotal        Decimal       @db.Decimal(10, 2)
-  tax             Decimal       @db.Decimal(10, 2)
-  total           Decimal       @db.Decimal(10, 2)
-  paid            Decimal       @db.Decimal(10, 2) @default(0)
-  remaining       Decimal       @db.Decimal(10, 2)
-  status          PaymentStatus @default(PENDING)  // PENDING, PARTIAL, COMPLETED, FAILED
-  splitType       String                            // "equal", "item", "custom"
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id           String        @id @default(uuid())
+  tenantId     String
+  orderId      String
+  billNumber   Int // 1, 2, 3, etc. for this order
+  personNumber Int // Person 1, Person 2, etc.
+  subtotal     Decimal       @db.Decimal(10, 2)
+  tax          Decimal       @db.Decimal(10, 2)
+  total        Decimal       @db.Decimal(10, 2)
+  paid         Decimal       @default(0) @db.Decimal(10, 2)
+  remaining    Decimal       @db.Decimal(10, 2)
+  status       PaymentStatus @default(PENDING) // PENDING, PARTIAL, COMPLETED, FAILED
+  splitType    String // "equal", "item", "custom"
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  tenant Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  order  Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  items  SplitPaymentItem[]
+  tenant   Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order    Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items    SplitPaymentItem[]
   payments SplitPaymentRecord[]
 
   @@unique([orderId, billNumber])
@@ -441,16 +529,16 @@ model SplitPayment {
 }
 
 model SplitPaymentItem {
-  id              String  @id @default(uuid())
-  tenantId        String
-  splitPaymentId  String
-  orderItemId     String
-  quantity        Int
-  price           Decimal @db.Decimal(10, 2)  // Price for this person (may be portion of full item)
+  id             String  @id @default(uuid())
+  tenantId       String
+  splitPaymentId String
+  orderItemId    String
+  quantity       Int
+  price          Decimal @db.Decimal(10, 2) // Price for this person (may be portion of full item)
 
-  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  splitPayment SplitPayment   @relation(fields: [splitPaymentId], references: [id], onDelete: Cascade)
-  orderItem    OrderItem      @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  splitPayment SplitPayment @relation(fields: [splitPaymentId], references: [id], onDelete: Cascade)
+  orderItem    OrderItem    @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 
   @@index([splitPaymentId])
   @@index([orderItemId])
@@ -458,17 +546,17 @@ model SplitPaymentItem {
 }
 
 model SplitPaymentRecord {
-  id              String        @id @default(uuid())
-  tenantId        String
-  splitPaymentId  String
-  amount          Decimal       @db.Decimal(10, 2)
-  method          PaymentMethod
-  status          PaymentStatus @default(COMPLETED)  // Track individual payment records
-  reference       String?
-  cardLastFour    String?
-  processedAt     DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String        @id @default(uuid())
+  tenantId       String
+  splitPaymentId String
+  amount         Decimal       @db.Decimal(10, 2)
+  method         PaymentMethod
+  status         PaymentStatus @default(COMPLETED) // Track individual payment records
+  reference      String?
+  cardLastFour   String?
+  processedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   splitPayment SplitPayment @relation(fields: [splitPaymentId], references: [id], onDelete: Cascade)
@@ -601,9 +689,14 @@ model InventoryItem {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  supplier   Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  movements  StockMovement[]
-  wineDetail WineDetail?
+  supplier         Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  movements        StockMovement[]
+  wineDetail       WineDetail?
+  menuItemMappings MenuItemToInventory[]
+
+  @@index([tenantId])
+  @@index([category])
+  @@index([supplierId])
 }
 
 model StockMovement {
@@ -635,28 +728,198 @@ model WineDetail {
   item InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
 }
 
+model MenuItemToInventory {
+  id              String   @id @default(uuid())
+  tenantId        String
+  menuItemId      String
+  inventoryItemId String
+  quantityNeeded  Decimal  @db.Decimal(10, 2)
+  unit            String // Unit of measurement (should match inventory item unit)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  menuItem      MenuItem      @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, inventoryItemId])
+  @@index([tenantId])
+  @@index([menuItemId])
+  @@index([inventoryItemId])
+}
+
 // ===============================
 // SHIFTS, TIPS & STAFF OPS
 // ===============================
 
 model Shift {
-  id        String    @id @default(uuid())
-  tenantId  String
-  userId    String
-  role      String
-  startAt   DateTime
-  endAt     DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id       String @id @default(uuid())
+  tenantId String
+  userId   String
+
+  // Scheduling fields
+  scheduledDate  DateTime // The date of the shift
+  scheduledStart DateTime // Scheduled start time
+  scheduledEnd   DateTime // Scheduled end time
+
+  // Actual time tracking
+  clockInTime  DateTime?
+  clockOutTime DateTime?
+
+  // Shift details
+  roleAssigned    String // server, cook, manager, host, bartender, sommelier
+  sectionAssigned String? // For servers - which section
+  breakMinutes    Int?     @default(0)
+  hoursWorked     Decimal? @db.Decimal(10, 2) // Calculated
+  notes           String?
+
+  // Status
+  status String @default("SCHEDULED") // SCHEDULED, ACTIVE, COMPLETED, CANCELLED
+
+  // Financial
+  laborCost Decimal? @db.Decimal(10, 2) // Calculated based on hourlyRate
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tips     Tip[]
+  clockIns ShiftClockIn[]
+
+  @@unique([tenantId, userId, scheduledDate, scheduledStart])
+  @@index([userId])
+  @@index([tenantId])
+  @@index([scheduledDate])
+  @@index([status])
+  @@index([roleAssigned])
+}
+
+// Clock-in/out tracking
+model ShiftClockIn {
+  id           String    @id @default(uuid())
+  tenantId     String
+  shiftId      String
+  clockInTime  DateTime
+  clockOutTime DateTime?
+  breakMinutes Int       @default(0)
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shift  Shift   @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String?
+
+  @@index([tenantId])
+  @@index([shiftId])
+  @@index([clockInTime])
+}
+
+// Shift templates for recurring schedules
+model ShiftTemplate {
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String // e.g., "Monday Morning Server"
+  roleRequired String // server, cook, manager, host, bartender, sommelier
+  dayOfWeek    Int // 0-6 (Sunday-Saturday)
+  startTime    DateTime // Time of day
+  endTime      DateTime // Time of day
+  breakMinutes Int      @default(0)
+  notes        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@index([roleRequired])
+  @@index([dayOfWeek])
+}
+
+// Coverage requirements
+model CoverageRequirement {
+  id           String    @id @default(uuid())
+  tenantId     String
+  roleRequired String // server, cook, manager, host, bartender, sommelier
+  minimumStaff Int // Minimum staff needed for this role
+  dayOfWeek    Int? // 0-6 (Sunday-Saturday), NULL for all days
+  startTime    DateTime? // Optional time window
+  endTime      DateTime? // Optional time window
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, roleRequired, dayOfWeek])
+  @@index([tenantId])
+  @@index([roleRequired])
+}
+
+// Staff availability overrides
+model StaffAvailabilityException {
+  id              String    @id @default(uuid())
+  tenantId        String
+  userId          String
+  dateOfException DateTime
+  isAvailable     Boolean // true = available despite blocked time, false = unavailable despite open time
+  startTime       DateTime?
+  endTime         DateTime?
+  reason          String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tips   Tip[]
 
-  @@index([userId])
   @@index([tenantId])
-  @@index([startAt])
-  @@index([endAt])
+  @@index([userId])
+  @@index([dateOfException])
+}
+
+// Labor cost tracking and reporting
+model LaborCostReport {
+  id               String   @id @default(uuid())
+  tenantId         String
+  reportDate       DateTime
+  totalLaborCost   Decimal  @db.Decimal(12, 2)
+  totalRevenue     Decimal  @db.Decimal(12, 2)
+  laborCostPercent Decimal  @db.Decimal(5, 2) // Percentage
+  staffCount       Int // Number of staff working
+  totalHours       Decimal  @db.Decimal(10, 2)
+  details          Json? // Breakdown by role
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, reportDate])
+  @@index([tenantId])
+  @@index([reportDate])
+}
+
+// Shift conflicts/warnings
+model ShiftConflict {
+  id              String   @id @default(uuid())
+  tenantId        String
+  userId          String
+  shiftId         String
+  conflictType    String // OVERLAP, OVERTIME, UNAVAILABLE, UNDERSTAFFED
+  conflictDetails Json // Details about the conflict
+  isResolved      Boolean  @default(false)
+  resolution      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([isResolved])
+  @@index([conflictType])
 }
 
 model PasswordReset {
@@ -675,16 +938,16 @@ model PasswordReset {
 }
 
 model ShiftReport {
-  id            String   @id @default(uuid())
-  tenantId      String
-  reportDate    DateTime
-  totalRevenue  Decimal  @default(0) @db.Decimal(10, 2)
-  totalOrders   Int      @default(0)
-  totalCovers   Int      @default(0)
-  averageCheck  Decimal  @default(0) @db.Decimal(10, 2)
-  generatedAt   DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(uuid())
+  tenantId     String
+  reportDate   DateTime
+  totalRevenue Decimal  @default(0) @db.Decimal(10, 2)
+  totalOrders  Int      @default(0)
+  totalCovers  Int      @default(0)
+  averageCheck Decimal  @default(0) @db.Decimal(10, 2)
+  generatedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   tenant Tenant @relation("ShiftReports", fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -714,6 +977,36 @@ model ReconciliationLog {
   @@index([reconciliationDate])
   @@index([reconciliationStatus])
   @@index([createdAt])
+}
+
+// ===============================
+// WAITLIST (FUTURE)
+// ===============================
+
+model Waitlist {
+  id          String         @id @default(uuid())
+  tenantId    String
+  guestName   String
+  guestPhone  String
+  guestEmail  String?
+  partySize   Int // 1-20
+  position    Int // Queue position
+  status      WaitlistStatus @default(WAITING)
+  notes       String?
+  addedAt     DateTime       @default(now())
+  notifiedAt  DateTime?
+  seatedAt    DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, guestPhone, addedAt]) // Prevent duplicate adds
+  @@index([tenantId])
+  @@index([status])
+  @@index([guestPhone])
+  @@index([addedAt])
 }
 
 // ===============================
@@ -820,4 +1113,11 @@ enum SpecialRequestStatus {
   OPEN
   IN_PROGRESS
   RESOLVED
+}
+
+enum WaitlistStatus {
+  WAITING
+  NOTIFIED
+  SEATED
+  CANCELLED
 }

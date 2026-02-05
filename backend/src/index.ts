@@ -15,6 +15,12 @@ import orderRoutes from './routes/order';
 import kitchenRoutes from './routes/kitchen';
 import tableRoutes from './routes/table';
 import splitRoutes from './routes/split';
+import reservationRoutes from './routes/reservation';
+import customerRoutes from './routes/customer';
+import inventoryRoutes from './routes/inventory';
+import staffRoutes from './routes/staff';
+import scheduleRoutes from './routes/schedules';
+import advancedSchedulingRoutes from './routes/advanced-scheduling';
 import { apiLimiter } from './middleware/rateLimiter';
 
 const app = express();
@@ -55,6 +61,12 @@ app.use(`${config.API_PREFIX}/orders`, orderRoutes);
 app.use(`${config.API_PREFIX}/kitchen`, kitchenRoutes);
 app.use(`${config.API_PREFIX}/tables`, tableRoutes);
 app.use(`${config.API_PREFIX}`, splitRoutes);
+app.use(`${config.API_PREFIX}/reservations`, reservationRoutes);
+app.use(`${config.API_PREFIX}/customers`, customerRoutes);
+app.use(`${config.API_PREFIX}/inventory`, inventoryRoutes);
+app.use(`${config.API_PREFIX}/staff`, staffRoutes);
+app.use(`${config.API_PREFIX}/schedules`, scheduleRoutes);
+app.use(`${config.API_PREFIX}/advanced`, advancedSchedulingRoutes);
 
 // 404 handler
 app.use((req, res) => {
