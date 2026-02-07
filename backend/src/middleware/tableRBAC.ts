@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { UserRole } from '@prisma/client';
 import logger from '../config/logger';
 
 /**
@@ -132,8 +133,8 @@ export const enforceTableOwnershipRBAC = (req: Request, res: Response, next: Nex
     // Additional checks could be added here for server-specific table assignments
   }
 
-  // Dishwashers can only update status to CLEANING
-  if (method === 'PATCH' && path.includes('/status') && user.role === 'DISHWASHER') {
+  // Staff members with STAFF role can update table status
+  if (method === 'PATCH' && path.includes('/status') && user.role === UserRole.STAFF) {
     const { status } = req.body;
     if (status !== 'CLEANING' && status !== 'AVAILABLE') {
       return res.status(403).json({

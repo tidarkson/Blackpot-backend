@@ -1,23 +1,25 @@
 import { z } from 'zod';
+import { UserRole } from '@prisma/client';
 
 /**
  * Staff Management Validators
  * Validates all staff-related operations
  */
 
-// Enum for staff roles
-export const StaffRoleEnum = z.enum([
+// Enum for staff roles (maps to actual UserRole values)
+export const StaffRoleEnum = z.enum([UserRole.MANAGER, UserRole.STAFF]);
+
+// Enum for staff positions
+export const StaffPositionEnum = z.enum([
   'SERVER',
-  'COOK',
-  'MANAGER',
-  'HOST',
+  'CHEF',
   'BARTENDER',
+  'HOST',
   'SOMMELIER',
   'DISHWASHER',
-  'CASHIER',
 ]);
 
-export type StaffRole = z.infer<typeof StaffRoleEnum>;
+export type StaffPosition = z.infer<typeof StaffPositionEnum>;
 
 // Weekly availability structure
 export const DayAvailabilitySchema = z.object({
@@ -41,7 +43,8 @@ export const createStaffSchema = z.object({
   email: z.string().email('Invalid email format'),
   name: z.string().min(2, 'Name must be at least 2 characters'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  role: StaffRoleEnum,
+  role: z.enum([UserRole.MANAGER, UserRole.STAFF]),
+  positions: z.array(StaffPositionEnum).min(1, 'At least one position is required'),
   locationId: z.string().uuid('Invalid location ID'),
   phone: z.string().optional(),
   hourlyRate: z.coerce.number().positive('Hourly rate must be positive').optional(),

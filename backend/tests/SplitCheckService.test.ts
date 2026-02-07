@@ -41,9 +41,44 @@ jest.mock('@prisma/client', () => ({
 
 describe('SplitCheckService', () => {
   let service: SplitCheckService;
+  let mockPrisma: any;
 
   beforeEach(() => {
-    service = new SplitCheckService();
+    mockPrisma = {
+      splitPayment: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        deleteMany: jest.fn(),
+        count: jest.fn(),
+      },
+      splitPaymentItem: {
+        create: jest.fn(),
+        deleteMany: jest.fn(),
+      },
+      splitPaymentRecord: {
+        create: jest.fn(),
+        deleteMany: jest.fn(),
+        count: jest.fn(),
+      },
+      orderCourse: {
+        findMany: jest.fn(),
+      },
+      orderItem: {
+        findMany: jest.fn(),
+      },
+      order: {
+        findFirst: jest.fn(),
+        update: jest.fn(),
+      },
+      financialSetting: {
+        findFirst: jest.fn(),
+      },
+      $transaction: jest.fn(),
+    };
+
+    service = new SplitCheckService(mockPrisma);
   });
 
   afterEach(() => {
@@ -56,37 +91,51 @@ describe('SplitCheckService', () => {
       const tenantId = 'tenant-123';
       const numPeople = 2;
 
-      const mockOrder = {
-        items: [
-          { orderItemId: 'item-1', itemName: 'Burger', quantity: 1, price: new Decimal('15.00') },
-          { orderItemId: 'item-2', itemName: 'Fries', quantity: 1, price: new Decimal('5.00') },
-        ],
-        itemsWithPrice: [
-          { orderItemId: 'item-1', itemName: 'Burger', quantity: 1, price: new Decimal('15.00') },
-          { orderItemId: 'item-2', itemName: 'Fries', quantity: 1, price: new Decimal('5.00') },
-        ],
-      };
+      const mockCourses = [{ id: 'course-1' }];
 
-      const mockBillInfo = {
+      const mockItems = [
+        {
+          id: 'item-1',
+          quantity: 1,
+          menuItem: { name: 'Burger', price: new Decimal('15.00') },
+        },
+        {
+          id: 'item-2',
+          quantity: 1,
+          menuItem: { name: 'Fries', price: new Decimal('5.00') },
+        },
+      ];
+
+      const mockOrder = {
+        id: orderId,
+        tenantId,
         subtotal: new Decimal('20.00'),
         tax: new Decimal('1.65'),
         total: new Decimal('21.65'),
       };
 
-      // Mock private methods - we'll test through public interface
+      mockPrisma.orderCourse.findMany.mockResolvedValue(mockCourses);
+      mockPrisma.orderItem.findMany.mockResolvedValue(mockItems);
+      mockPrisma.order.findFirst.mockResolvedValue(mockOrder);
+
       const splits = await service.calculateEqualSplit(orderId, numPeople, tenantId);
 
       expect(splits).toBeDefined();
       expect(splits.length).toBe(numPeople);
 
       // Each person should have roughly equal amounts (last person absorbs rounding)
-    splits.forEach((split: { total: any; subtotal: any; tax: any; billNumber: number; personNumber: number }, index: number) => {
-      expect(split.total).toBeDefined();
-      expect(split.subtotal).toBeDefined();
-      expect(split.tax).toBeDefined();
-      expect(split.billNumber).toBe(index + 1);
-      expect(split.personNumber).toBe(index + 1);
-    });
+      splits.forEach(
+        (
+          split: { total: any; subtotal: any; tax: any; billNumber: number; personNumber: number },
+          index: number
+        ) => {
+          expect(split.total).toBeDefined();
+          expect(split.subtotal).toBeDefined();
+          expect(split.tax).toBeDefined();
+          expect(split.billNumber).toBe(index + 1);
+          expect(split.personNumber).toBe(index + 1);
+        }
+      );
     });
 
     it('should throw error if numPeople is less than 2', async () => {
@@ -112,12 +161,45 @@ describe('SplitCheckService', () => {
       const tenantId = 'tenant-123';
       const numPeople = 3;
 
+      const mockCourses = [{ id: 'course-1' }];
+      const mockItems = [
+        {
+          id: 'item-1',
+          quantity: 1,
+          menuItem: { name: 'Burger', price: new Decimal('15.00') },
+        },
+        {
+          id: 'item-2',
+          quantity: 1,
+          menuItem: { name: 'Fries', price: new Decimal('5.00') },
+        },
+      ];
+      const mockOrder = {
+        id: orderId,
+        tenantId,
+        subtotal: new Decimal('20.00'),
+        tax: new Decimal('1.65'),
+        total: new Decimal('21.65'),
+      };
+
+      mockPrisma.orderCourse.findMany.mockResolvedValue(mockCourses);
+      mockPrisma.orderItem.findMany.mockResolvedValue(mockItems);
+      mockPrisma.order.findFirst.mockResolvedValue(mockOrder);
+
       const splits = await service.calculateEqualSplit(orderId, numPeople, tenantId);
 
       // All splits should have tax
-    splits.forEach((split: { total: Decimal; subtotal: Decimal; tax: Decimal; billNumber: number; personNumber: number }) => {
-        expect(split.tax).toBeGreaterThan(new Decimal('0').toNumber());
-    });
+      splits.forEach(
+        (split: {
+          total: Decimal;
+          subtotal: Decimal;
+          tax: Decimal;
+          billNumber: number;
+          personNumber: number;
+        }) => {
+          expect(Number(split.tax)).toBeGreaterThan(0);
+        }
+      );
     });
 
     it('last person should absorb rounding difference', async () => {
@@ -125,10 +207,38 @@ describe('SplitCheckService', () => {
       const tenantId = 'tenant-123';
       const numPeople = 3;
 
+      const mockCourses = [{ id: 'course-1' }];
+      const mockItems = [
+        {
+          id: 'item-1',
+          quantity: 1,
+          menuItem: { name: 'Burger', price: new Decimal('15.00') },
+        },
+        {
+          id: 'item-2',
+          quantity: 1,
+          menuItem: { name: 'Fries', price: new Decimal('5.00') },
+        },
+      ];
+      const mockOrder = {
+        id: orderId,
+        tenantId,
+        subtotal: new Decimal('20.00'),
+        tax: new Decimal('1.65'),
+        total: new Decimal('21.65'),
+      };
+
+      mockPrisma.orderCourse.findMany.mockResolvedValue(mockCourses);
+      mockPrisma.orderItem.findMany.mockResolvedValue(mockItems);
+      mockPrisma.order.findFirst.mockResolvedValue(mockOrder);
+
       const splits = await service.calculateEqualSplit(orderId, numPeople, tenantId);
 
       // Calculate total from splits
-      const totalFromSplits = splits.reduce((sum: Decimal, split: any) => sum.plus(split.total), new Decimal('0'));
+      const totalFromSplits = splits.reduce(
+        (sum: Decimal, split: any) => sum.plus(split.total),
+        new Decimal('0')
+      );
 
       // Validate totals are reasonable (within rounding)
       expect(totalFromSplits).toBeDefined();
@@ -143,6 +253,31 @@ describe('SplitCheckService', () => {
         { personNumber: 1, itemIds: ['item-1'] },
         { personNumber: 2, itemIds: ['item-2'] },
       ];
+
+      const mockCourses = [{ id: 'course-1' }];
+      const mockItems = [
+        {
+          id: 'item-1',
+          quantity: 1,
+          menuItem: { name: 'Burger', price: new Decimal('15.00') },
+        },
+        {
+          id: 'item-2',
+          quantity: 1,
+          menuItem: { name: 'Fries', price: new Decimal('5.00') },
+        },
+      ];
+      const mockOrder = {
+        id: orderId,
+        tenantId,
+        subtotal: new Decimal('20.00'),
+        tax: new Decimal('1.65'),
+        total: new Decimal('21.65'),
+      };
+
+      mockPrisma.orderCourse.findMany.mockResolvedValue(mockCourses);
+      mockPrisma.orderItem.findMany.mockResolvedValue(mockItems);
+      mockPrisma.order.findFirst.mockResolvedValue(mockOrder);
 
       const splits = await service.calculateItemSplit(orderId, itemAssignments, tenantId);
 
@@ -173,12 +308,37 @@ describe('SplitCheckService', () => {
         { personNumber: 2, itemIds: ['item-2'] },
       ];
 
+      const mockCourses = [{ id: 'course-1' }];
+      const mockItems = [
+        {
+          id: 'item-1',
+          quantity: 1,
+          menuItem: { name: 'Burger', price: new Decimal('15.00') },
+        },
+        {
+          id: 'item-2',
+          quantity: 1,
+          menuItem: { name: 'Fries', price: new Decimal('5.00') },
+        },
+      ];
+      const mockOrder = {
+        id: orderId,
+        tenantId,
+        subtotal: new Decimal('20.00'),
+        tax: new Decimal('1.65'),
+        total: new Decimal('21.65'),
+      };
+
+      mockPrisma.orderCourse.findMany.mockResolvedValue(mockCourses);
+      mockPrisma.orderItem.findMany.mockResolvedValue(mockItems);
+      mockPrisma.order.findFirst.mockResolvedValue(mockOrder);
+
       const splits = await service.calculateItemSplit(orderId, itemAssignments, tenantId);
 
       // Tax should be proportional to subtotal
       splits.forEach((split: any) => {
         if (split.subtotal.gt(new Decimal('0'))) {
-          expect(split.tax).toBeGreaterThan(new Decimal('0').toNumber());
+          expect(Number(split.tax)).toBeGreaterThan(0);
         }
       });
     });
@@ -189,9 +349,34 @@ describe('SplitCheckService', () => {
       const orderId = 'order-123';
       const tenantId = 'tenant-123';
       const amounts = [
-        { personNumber: 1, amount: new Decimal('15.00') },
-        { personNumber: 2, amount: new Decimal('10.00') },
+        { personNumber: 1, amount: new Decimal('10.825') },
+        { personNumber: 2, amount: new Decimal('10.825') },
       ];
+
+      const mockCourses = [{ id: 'course-1' }];
+      const mockItems = [
+        {
+          id: 'item-1',
+          quantity: 1,
+          menuItem: { name: 'Burger', price: new Decimal('15.00') },
+        },
+        {
+          id: 'item-2',
+          quantity: 1,
+          menuItem: { name: 'Fries', price: new Decimal('5.00') },
+        },
+      ];
+      const mockOrder = {
+        id: orderId,
+        tenantId,
+        subtotal: new Decimal('20.00'),
+        tax: new Decimal('1.65'),
+        total: new Decimal('21.65'),
+      };
+
+      mockPrisma.orderCourse.findMany.mockResolvedValue(mockCourses);
+      mockPrisma.orderItem.findMany.mockResolvedValue(mockItems);
+      mockPrisma.order.findFirst.mockResolvedValue(mockOrder);
 
       const splits = await service.calculateCustomSplit(orderId, amounts, tenantId);
 
@@ -222,7 +407,7 @@ describe('SplitCheckService', () => {
       // This test would require mocking the database calls
       // In a real scenario, this would interact with Prisma
       expect(splitPaymentId).toBeDefined();
-      expect(amount).toEqual(new Decimal('10.00'));
+      expect(Number(amount)).toEqual(10.0);
       expect(tenantId).toBeDefined();
     });
 

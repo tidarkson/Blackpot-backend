@@ -22,7 +22,7 @@ export class StaffController {
       // Validate request body
       const data = createStaffSchema.parse(req.body);
 
-      const staff = await staffService.createStaff(tenantId, data);
+      const staff = await staffService.createStaffMember(tenantId, data);
 
       res.status(201).json({
         status: 'success',

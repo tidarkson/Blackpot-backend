@@ -75,3 +75,10 @@ temp/
 .turbo/
 dist/
 build/
+
+#  Migration utilities
+record-migration.js
+check-db-migrations.js
+check-migration-table.js
+check-migration-table.sql
+apply-migration.js

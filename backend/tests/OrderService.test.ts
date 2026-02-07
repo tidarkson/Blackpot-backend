@@ -184,7 +184,11 @@ describe('OrderService', () => {
         tenantId: 'tenant-1',
       };
       const mockCourse = { id: 'course-1', orderId: 'order-1' };
-      const mockItem = { id: 'item-1', quantity: 2 };
+      const mockItem = { 
+        id: 'item-1', 
+        quantity: 2,
+        menuItem: { name: 'Test Item' }
+      };
 
       mockPrisma.order.findFirst.mockResolvedValue(mockOrder);
       mockPrisma.orderCourse.findFirst.mockResolvedValue(mockCourse);

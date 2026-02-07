@@ -51,10 +51,23 @@ describe('KitchenService', () => {
       const result = await kitchenService.getPendingOrders('tenant-1');
 
       expect(mockPrisma.orderItem.findMany).toHaveBeenCalledWith({
-        where: expect.objectContaining({
+        where: {
           preparedAt: null,
-        }),
-        include: expect.any(Object),
+          orderCourse: {
+            order: { tenantId: 'tenant-1' },
+          },
+        },
+        include: {
+          menuItem: true,
+          orderCourse: {
+            include: {
+              order: {
+                include: { table: true },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
       });
       expect(result).toHaveLength(2);
     });
@@ -83,13 +96,25 @@ describe('KitchenService', () => {
       const result = await kitchenService.getOrdersByStation('station-1', 'tenant-1');
 
       expect(mockPrisma.orderItem.findMany).toHaveBeenCalledWith({
-        where: expect.objectContaining({
+        where: {
           orderCourse: {
             kitchenStationId: 'station-1',
             order: { tenantId: 'tenant-1' },
           },
-        }),
-        include: expect.any(Object),
+        },
+        include: {
+          menuItem: true,
+          orderCourse: {
+            include: {
+              order: {
+                include: {
+                  table: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
       });
       expect(result).toHaveLength(1);
     });
@@ -241,12 +266,12 @@ describe('KitchenService', () => {
 
       const result = await kitchenService.getKitchenDisplaySystem('tenant-1');
 
-      expect(result).toHaveProperty('pending');
-      expect(result).toHaveProperty('prepared');
-      expect(result).toHaveProperty('served');
-      expect(result.pending).toHaveLength(1);
-      expect(result.prepared).toHaveLength(1);
-      expect(result.served).toHaveLength(1);
+      expect(result).toHaveProperty('PENDING');
+      expect(result).toHaveProperty('PREPARED');
+      expect(result).toHaveProperty('SERVED');
+      expect(result.PENDING).toHaveLength(1);
+      expect(result.PREPARED).toHaveLength(1);
+      expect(result.SERVED).toHaveLength(1);
     });
 
     it('should filter by station if provided', async () => {
@@ -255,12 +280,27 @@ describe('KitchenService', () => {
       await kitchenService.getKitchenDisplaySystem('tenant-1', 'station-1');
 
       expect(mockPrisma.orderItem.findMany).toHaveBeenCalledWith({
-        where: expect.objectContaining({
-          orderCourse: expect.objectContaining({
+        where: {
+          orderCourse: {
+            order: { tenantId: 'tenant-1' },
             kitchenStationId: 'station-1',
-          }),
-        }),
-        include: expect.any(Object),
+          },
+        },
+        include: {
+          menuItem: true,
+          orderCourse: {
+            include: {
+              order: {
+                include: {
+                  table: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
       });
     });
   });
@@ -288,9 +328,9 @@ describe('KitchenService', () => {
     it('should return null if item not found', async () => {
       mockPrisma.orderItem.findFirst.mockResolvedValue(null);
 
-      const result = await kitchenService.calculatePrepTime('invalid-id', 'tenant-1');
-
-      expect(result).toBeNull();
+      await expect(
+        kitchenService.calculatePrepTime('invalid-id', 'tenant-1')
+      ).rejects.toThrow('Item not found');
     });
   });
 

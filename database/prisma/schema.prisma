@@ -51,6 +51,7 @@ model Tenant {
   splitPaymentItems           SplitPaymentItem[]
   splitPaymentRecords         SplitPaymentRecord[]
   waitlists                   Waitlist[]
+  leaveRequests               LeaveRequest[]
 }
 
 model Location {
@@ -146,9 +147,10 @@ model User {
 
   // Staff-specific fields
   phone        String?
-  hourlyRate   Decimal?  @db.Decimal(10, 2)
+  hourlyRate   Decimal?      @db.Decimal(10, 2)
   hireDate     DateTime?
   availability Json? // Day-based availability: { "monday": { "available": true, "startTime": "09:00", "endTime": "17:00" }, ... }
+  positions    StaffPosition[] // Job positions for STAFF users (can have multiple: ["SERVER", "CASHIER"])
 
   tenant                      Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   location                    Location?                    @relation(fields: [locationId], references: [id], onDelete: SetNull)
@@ -161,6 +163,7 @@ model User {
   shiftClockIns               ShiftClockIn[]
   assignedTables              Table[]                      @relation("TableServers")
   staffAvailabilityExceptions StaffAvailabilityException[]
+  leaveRequests               LeaveRequest[]
 
   @@index([tenantId])
   @@index([role])
@@ -880,6 +883,32 @@ model StaffAvailabilityException {
   @@index([dateOfException])
 }
 
+// Staff leave requests
+model LeaveRequest {
+  id           String   @id @default(uuid())
+  tenantId     String
+  userId       String
+  startDate    DateTime
+  endDate      DateTime
+  reason       String?
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedBy   String? // userId of approver
+  approvedAt   DateTime?
+  rejectionReason String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, startDate, endDate])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+}
+
 // Labor cost tracking and reporting
 model LaborCostReport {
   id               String   @id @default(uuid())
@@ -1013,16 +1042,26 @@ model Waitlist {
 // ENUMS
 // ===============================
 
+// Role hierarchy: OWNER > MANAGER > SUPERVISOR > STAFF > CUSTOMER
+// For restaurant operations, use UserRole + StaffPosition
 enum UserRole {
-  OWNER
-  MANAGER
-  SUPERVISOR
-  SERVER
-  HOST
-  CHEF
-  SOMMELIER
-  DISHWASHER
-  BARTENDER
+  OWNER       // Business owner, full system access
+  MANAGER     // Department/location manager, operational control
+  SUPERVISOR  // Shift supervisor, staff coordination
+  STAFF       // Generic staff member, position-based permissions
+  CUSTOMER    // External customer, limited access
+}
+
+// Staff positions for detailed permission control
+// A STAFF user can have one or more positions
+enum StaffPosition {
+  SERVER      // Waitstaff, takes orders, serves
+  HOST        // Seating, reservations, host stand
+  CHEF        // Kitchen, food preparation, plating
+  BARTENDER   // Bar, beverages, cocktails
+  SOMMELIER   // Wine service, beverage expert
+  CASHIER     // POS, payments, checkout
+  DISHWASHER  // Kitchen support, cleaning
 }
 
 enum TableShape {

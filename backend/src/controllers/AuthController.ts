@@ -13,6 +13,16 @@ export class AuthController {
       const { email, password } = req.body;
       const ipAddress = req.ip || req.socket.remoteAddress;
 
+      // Validate required fields
+      if (!email || !password) {
+        return res.status(400).json({
+          status: 'error',
+          code: 400,
+          error: 'MISSING_FIELDS',
+          message: 'Email and password are required',
+        });
+      }
+
       const result = await authService.login(email, password, ipAddress);
 
       return res.status(200).json({

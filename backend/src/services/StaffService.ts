@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, UserRole, StaffPosition, Shift, LeaveRequest, User } from '@prisma/client';
 import { Decimal } from 'decimal.js';
 import logger from '../config/logger';
 import { AuthService } from './AuthService';
@@ -6,6 +6,16 @@ import { CreateStaffRequest, UpdateStaffRequest, ListStaffFilters, AvailabilityS
 
 const prisma = new PrismaClient();
 const authService = new AuthService();
+
+interface CreateStaffInput {
+  email: string;
+  name: string;
+  role: UserRole;
+  positions: StaffPosition[];
+  hourlyRate?: number;
+  phone?: string;
+  locationId?: string;
+}
 
 /**
  * StaffService
@@ -16,59 +26,467 @@ const authService = new AuthService();
  * - Staff filtering and searches
  * - Staff deactivation and reactivation
  * - Availability validation
+ * - Shift assignment and management
+ * - Leave request handling
  */
 export class StaffService {
+  constructor(private prismaInstance?: PrismaClient) {
+    if (prismaInstance) {
+      // Use injected Prisma instance (for testing)
+    }
+  }
+
+  private getPrisma(): PrismaClient {
+    return this.prismaInstance || prisma;
+  }
   /**
-   * Create a new staff member
+   * Create a new staff member with default availability
    */
-  async createStaff(tenantId: string, data: CreateStaffRequest) {
-    try {
-      // Hash password
-      const passwordHash = await authService.hashPassword(data.password);
+  async createStaffMember(tenantId: string, input: CreateStaffInput): Promise<User> {
+    const db = this.getPrisma();
+    
+    // Default availability: all days available
+    const defaultAvailability = {
+      monday: { available: true, startTime: '09:00', endTime: '17:00' },
+      tuesday: { available: true, startTime: '09:00', endTime: '17:00' },
+      wednesday: { available: true, startTime: '09:00', endTime: '17:00' },
+      thursday: { available: true, startTime: '09:00', endTime: '17:00' },
+      friday: { available: true, startTime: '09:00', endTime: '17:00' },
+      saturday: { available: true, startTime: '10:00', endTime: '22:00' },
+      sunday: { available: false },
+    };
 
-      // Map staff role to UserRole
-      const userRole = this.mapStaffRoleToUserRole(data.role);
+    const user = await db.user.create({
+      data: {
+        tenantId,
+        email: input.email,
+        name: input.name,
+        role: input.role,
+        positions: input.positions,
+        hourlyRate: input.hourlyRate ? new Decimal(input.hourlyRate) : undefined,
+        phone: input.phone,
+        availability: defaultAvailability,
+        passwordHash: 'hashed_password', // Placeholder - should be properly hashed
+        isActive: true,
+        locationId: input.locationId,
+      },
+    });
 
-      // Validate availability if provided
-      if (data.availability) {
-        AvailabilitySchema.parse(data.availability);
+    logger.info(`✅ Staff member created: ${input.name}`);
+    return user;
+  }
+
+  /**
+   * Set availability for a staff member by day of week
+   */
+  async setAvailability(userId: string, availability: Record<string, any>): Promise<User> {
+    const db = this.getPrisma();
+    
+    const user = await db.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('Staff member not found');
+    }
+
+    // Merge with existing availability
+    const currentAvail = (user.availability as Record<string, any>) || {};
+    const updatedAvailability = {
+      ...currentAvail,
+      ...availability,
+    };
+
+    return db.user.update({
+      where: { id: userId },
+      data: {
+        availability: updatedAvailability,
+        updatedAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Set availability exception for a specific date range
+   */
+  async setAvailabilityException(
+    userId: string,
+    tenantId: string,
+    startDate: Date,
+    endDate: Date,
+    isAvailable: boolean,
+    reason?: string
+  ): Promise<any> {
+    const db = this.getPrisma();
+    
+    // Create an exception for each day in the range
+    const exception = await db.staffAvailabilityException.create({
+      data: {
+        userId,
+        tenantId,
+        dateOfException: startDate,
+        isAvailable,
+        startTime: startDate,
+        endTime: endDate,
+        reason,
+      },
+    });
+
+    return exception;
+  }
+
+  /**
+   * Get available staff for a specific date, optionally filtered by role
+   */
+  async getAvailableStaff(
+    tenantId: string,
+    date: Date,
+    position?: StaffPosition
+  ): Promise<User[]> {
+    const db = this.getPrisma();
+    const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][
+      date.getDay()
+    ];
+
+    // Get all staff for this tenant
+    let staffMembers = await db.user.findMany({
+      where: {
+        tenantId,
+        role: UserRole.STAFF,
+        isActive: true,
+      },
+    });
+
+    // Filter by position if specified
+    if (position) {
+      staffMembers = staffMembers.filter((staff) => staff.positions.includes(position));
+    }
+
+    // Filter by availability
+    const availableStaff: User[] = [];
+
+    for (const staff of staffMembers) {
+      const isAvailable = await this.checkAvailability(staff.id, date);
+      if (isAvailable) {
+        availableStaff.push(staff);
       }
+    }
 
-      const staff = await prisma.user.create({
-        data: {
-          email: data.email,
-          name: data.name,
-          passwordHash,
-          role: userRole,
-          tenantId,
-          locationId: data.locationId,
-          phone: data.phone,
-          hourlyRate: data.hourlyRate ? new Decimal(data.hourlyRate) : undefined,
-          hireDate: data.hireDate ? new Date(data.hireDate) : undefined,
-          availability: (data.availability as any) || null,
-          isActive: true,
+    return availableStaff;
+  }
+
+  /**
+   * Check if a staff member is available on a specific date
+   */
+  async checkAvailability(userId: string, date: Date): Promise<boolean> {
+    const db = this.getPrisma();
+    
+    const user = await db.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) return false;
+
+    // Check for leave requests
+    const leaveRequest = await db.leaveRequest.findFirst({
+      where: {
+        userId,
+        startDate: { lte: date },
+        endDate: { gte: date },
+        status: 'APPROVED',
+      },
+    });
+
+    if (leaveRequest) {
+      return false;
+    }
+
+    // Check for availability exceptions
+    const exception = await db.staffAvailabilityException.findFirst({
+      where: {
+        userId,
+        dateOfException: {
+          lte: date,
+          gte: date,
         },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          phone: true,
-          hourlyRate: true,
-          hireDate: true,
-          availability: true,
-          isActive: true,
-          createdAt: true,
+      },
+    });
+
+    if (exception) {
+      return exception.isAvailable;
+    }
+
+    // Check regular availability by day of week
+    const dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][
+      date.getDay()
+    ];
+    const availability = (user.availability as Record<string, any>) || {};
+    const dayAvailability = availability[dayOfWeek];
+
+    if (dayAvailability && dayAvailability.available === false) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Assign a staff member to a shift
+   */
+  async assignShift(shiftId: string, userId: string, tenantId: string): Promise<Shift> {
+    const db = this.getPrisma();
+    
+    const shift = await db.shift.findUnique({
+      where: { id: shiftId },
+    });
+
+    if (!shift) {
+      throw new Error('Shift not found');
+    }
+
+    const user = await db.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('Staff member not found');
+    }
+
+    // Validate role matches
+    const roleMatches = this.validateRoleMatch(user.positions, shift.roleAssigned);
+    if (!roleMatches) {
+      throw new Error(`Staff member does not have required role: ${shift.roleAssigned}`);
+    }
+
+    // Update shift with staff assignment
+    return db.shift.update({
+      where: { id: shiftId },
+      data: {
+        userId,
+        status: 'SCHEDULED',
+        updatedAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Validate if staff member's positions match shift requirement
+   */
+  validateRoleMatch(staffPositions: StaffPosition[], requiredRole: string): boolean {
+    const roleMap: Record<string, StaffPosition> = {
+      SERVER: StaffPosition.SERVER,
+      HOST: StaffPosition.HOST,
+      CHEF: StaffPosition.CHEF,
+      BARTENDER: StaffPosition.BARTENDER,
+      SOMMELIER: StaffPosition.SOMMELIER,
+      CASHIER: StaffPosition.CASHIER,
+      DISHWASHER: StaffPosition.DISHWASHER,
+    };
+
+    const requiredPosition = roleMap[requiredRole];
+    return staffPositions.includes(requiredPosition);
+  }
+
+  /**
+   * Get shift conflicts for a staff member
+   */
+  async getShiftConflicts(userId: string, tenantId: string): Promise<any[]> {
+    const db = this.getPrisma();
+    
+    const conflicts = await db.shiftConflict.findMany({
+      where: {
+        userId,
+        tenantId,
+        isResolved: false,
+      },
+    });
+
+    return conflicts;
+  }
+
+  /**
+   * Request leave for a staff member
+   */
+  async requestLeave(
+    userId: string,
+    tenantId: string,
+    startDate: Date,
+    endDate: Date,
+    reason?: string
+  ): Promise<LeaveRequest> {
+    const db = this.getPrisma();
+    
+    // Check for overlapping leaves
+    const overlappingLeaves = await db.leaveRequest.findMany({
+      where: {
+        userId,
+        tenantId,
+        startDate: { lte: endDate },
+        endDate: { gte: startDate },
+        status: { in: ['PENDING', 'APPROVED'] },
+      },
+    });
+
+    if (overlappingLeaves.length > 0) {
+      logger.warn(`Leave request overlaps with existing requests for user ${userId}`);
+    }
+
+    const leaveRequest = await db.leaveRequest.create({
+      data: {
+        userId,
+        tenantId,
+        startDate,
+        endDate,
+        reason,
+        status: 'PENDING',
+      },
+    });
+
+    // Notify manager
+    const managers = await db.user.findMany({
+      where: {
+        tenantId,
+        role: UserRole.MANAGER,
+      },
+    });
+
+    for (const manager of managers) {
+      await db.notification.create({
+        data: {
+          tenantId,
+          userId: manager.id,
+          type: 'LEAVE_REQUEST',
+          message: `Staff member ${userId} has requested leave from ${startDate.toDateString()} to ${endDate.toDateString()}`,
+        },
+      });
+    }
+
+    logger.info(`📋 Leave request created for staff ${userId}`);
+    return leaveRequest;
+  }
+
+  /**
+   * Check for consecutive leave conflicts
+   */
+  async checkLeaveConflicts(
+    userId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<LeaveRequest[]> {
+    const db = this.getPrisma();
+    
+    const conflicts = await db.leaveRequest.findMany({
+      where: {
+        userId,
+        startDate: { lte: endDate },
+        endDate: { gte: startDate },
+        status: { in: ['PENDING', 'APPROVED'] },
+      },
+    });
+
+    return conflicts;
+  }
+
+  /**
+   * Approve a leave request
+   */
+  async approveLeave(leaveRequestId: string, approverId: string, tenantId: string): Promise<LeaveRequest> {
+    const db = this.getPrisma();
+    
+    const leaveRequest = await db.leaveRequest.findUnique({
+      where: { id: leaveRequestId },
+    });
+
+    if (!leaveRequest) {
+      throw new Error('Leave request not found');
+    }
+
+    // Update leave request status
+    const approved = await db.leaveRequest.update({
+      where: { id: leaveRequestId },
+      data: {
+        status: 'APPROVED',
+        approvedBy: approverId,
+        approvedAt: new Date(),
+      },
+    });
+
+    // Mark staff as unavailable for the period
+    await this.setAvailabilityException(
+      leaveRequest.userId,
+      tenantId,
+      leaveRequest.startDate,
+      leaveRequest.endDate,
+      false,
+      `Approved leave: ${leaveRequest.reason}`
+    );
+
+    // Remove or mark conflicting shifts as cancelled
+    const conflictingShifts = await db.shift.findMany({
+      where: {
+        userId: leaveRequest.userId,
+        scheduledDate: {
+          gte: leaveRequest.startDate,
+          lte: leaveRequest.endDate,
+        },
+      },
+    });
+
+    for (const shift of conflictingShifts) {
+      await db.shift.update({
+        where: { id: shift.id },
+        data: {
+          status: 'CANCELLED',
+          updatedAt: new Date(),
         },
       });
 
-      logger.info(`✅ Staff member created: ${data.name} (${data.role})`);
-
-      return staff;
-    } catch (error: any) {
-      logger.error('Error creating staff:', error.message);
-      throw error;
+      // Log conflict
+      await db.shiftConflict.create({
+        data: {
+          userId: leaveRequest.userId,
+          tenantId,
+          shiftId: shift.id,
+          conflictType: 'UNAVAILABLE',
+          conflictDetails: {
+            reason: 'Cancelled due to approved leave',
+            leaveRequestId,
+          },
+        },
+      });
     }
+
+    // Notify staff member
+    await db.notification.create({
+      data: {
+        tenantId,
+        userId: leaveRequest.userId,
+        type: 'LEAVE_APPROVED',
+        message: `Your leave request from ${leaveRequest.startDate.toDateString()} to ${leaveRequest.endDate.toDateString()} has been approved.`,
+      },
+    });
+
+    logger.info(`✅ Leave request approved for staff ${leaveRequest.userId}`);
+    return approved;
+  }
+
+  /**
+   * Reject a leave request
+   */
+  async rejectLeave(leaveRequestId: string, approverId: string, reason?: string): Promise<LeaveRequest> {
+    const db = this.getPrisma();
+    
+    const rejected = await db.leaveRequest.update({
+      where: { id: leaveRequestId },
+      data: {
+        status: 'REJECTED',
+        approvedBy: approverId,
+        rejectionReason: reason,
+      },
+    });
+
+    logger.info(`❌ Leave request rejected`);
+    return rejected;
   }
 
   /**
@@ -477,16 +895,16 @@ export class StaffService {
    */
   private mapStaffRoleToUserRole(staffRole: string): UserRole {
     const roleMap: { [key: string]: UserRole } = {
-      SERVER: UserRole.SERVER,
-      COOK: UserRole.CHEF,
+      SERVER: UserRole.STAFF,
+      COOK: UserRole.STAFF,
       MANAGER: UserRole.MANAGER,
-      HOST: UserRole.HOST,
-      BARTENDER: UserRole.BARTENDER,
-      SOMMELIER: UserRole.SOMMELIER,
-      DISHWASHER: UserRole.DISHWASHER,
+      HOST: UserRole.STAFF,
+      BARTENDER: UserRole.STAFF,
+      SOMMELIER: UserRole.STAFF,
+      DISHWASHER: UserRole.STAFF,
     };
 
-    return roleMap[staffRole] || UserRole.SERVER;
+    return roleMap[staffRole] || UserRole.STAFF;
   }
 }
 

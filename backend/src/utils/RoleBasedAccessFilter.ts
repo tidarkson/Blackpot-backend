@@ -42,50 +42,11 @@ export class RoleBasedAccessFilter {
           logger.info(`RBAC: SUPERVISOR ${userId} accessing ${supervisorOrders.length} tenant orders`);
           return supervisorOrders;
 
-        case UserRole.SERVER:
-          // Servers see only orders for tables they're serving
-          const serverOrders = orders.filter((o) => {
-            return o.serverId === userId && o.tenantId === tenantId;
-          });
-          logger.info(`RBAC: SERVER ${userId} accessing ${serverOrders.length} assigned orders`);
-          return serverOrders;
-
-        case UserRole.CHEF:
-          // Chefs see orders with items assigned to their kitchen station
-          const chefOrders = orders.filter((o) => {
-            return (
-              o.tenantId === tenantId &&
-              o.courses.some(
-                (course: any) =>
-                  course.kitchenStationId === userId || course.kitchenStationId === null
-              )
-            );
-          });
-          logger.info(`RBAC: CHEF ${userId} accessing ${chefOrders.length} kitchen orders`);
-          return chefOrders;
-
-        case UserRole.HOST:
-          // Hosts see all orders (front desk, seating)
-          const hostOrders = orders.filter((o) => o.tenantId === tenantId);
-          logger.info(`RBAC: HOST ${userId} accessing ${hostOrders.length} orders`);
-          return hostOrders;
-
-        case UserRole.SOMMELIER:
-          // Sommeliers see all orders (wine/beverage service)
-          const sommelierOrders = orders.filter((o) => o.tenantId === tenantId);
-          logger.info(`RBAC: SOMMELIER ${userId} accessing ${sommelierOrders.length} orders`);
-          return sommelierOrders;
-
-        case UserRole.BARTENDER:
-          // Bartenders see all orders (beverage orders)
-          const bartenderOrders = orders.filter((o) => o.tenantId === tenantId);
-          logger.info(`RBAC: BARTENDER ${userId} accessing ${bartenderOrders.length} orders`);
-          return bartenderOrders;
-
-        case UserRole.DISHWASHER:
-          // Dishwashers have no order visibility
-          logger.info(`RBAC: DISHWASHER ${userId} has no order access`);
-          return [];
+        case UserRole.STAFF:
+          // Staff members see tenant-level orders (servers, chefs, hosts, bartenders, etc.)
+          const staffOrders = orders.filter((o) => o.tenantId === tenantId);
+          logger.info(`RBAC: STAFF ${userId} accessing ${staffOrders.length} tenant orders`);
+          return staffOrders;
 
         default:
           logger.warn(`RBAC: Unknown role ${role} for user ${userId}`);
@@ -131,9 +92,9 @@ export class RoleBasedAccessFilter {
     const { userId, role, tenantId } = options;
 
     try {
-      // All authenticated users in a tenant can see tables (except DISHWASHER)
-      if (role === UserRole.DISHWASHER) {
-        logger.info(`RBAC: DISHWASHER ${userId} has no table access`);
+      // All authenticated users in a tenant can see tables
+      if (role === UserRole.CUSTOMER) {
+        logger.info(`RBAC: CUSTOMER ${userId} has no table access`);
         return [];
       }
 
@@ -206,44 +167,16 @@ export class RoleBasedAccessFilter {
         tables: ['read', 'update'],
         reports: ['read'],
       },
-      [UserRole.SERVER]: {
+      [UserRole.STAFF]: {
         orders: ['read', 'update'],
-        payments: ['create', 'read'],
-        users: [],
-        tables: ['read'],
-        reports: [],
-      },
-      [UserRole.CHEF]: {
-        orders: ['read'],
-        payments: [],
-        users: [],
-        tables: [],
-        reports: [],
-      },
-      [UserRole.HOST]: {
-        orders: ['create', 'read', 'update'],
         payments: [],
         users: [],
         tables: ['read', 'update'],
         reports: [],
       },
-      [UserRole.SOMMELIER]: {
+      [UserRole.CUSTOMER]: {
         orders: ['read'],
-        payments: [],
-        users: [],
-        tables: ['read'],
-        reports: [],
-      },
-      [UserRole.BARTENDER]: {
-        orders: ['read'],
-        payments: [],
-        users: [],
-        tables: ['read'],
-        reports: [],
-      },
-      [UserRole.DISHWASHER]: {
-        orders: [],
-        payments: [],
+        payments: ['read'],
         users: [],
         tables: [],
         reports: [],
@@ -277,19 +210,9 @@ export class RoleBasedAccessFilter {
 
     // Add role-specific filters
     switch (role) {
-      case UserRole.SERVER:
-        filters.serverId = userId;
-        break;
-      case UserRole.CHEF:
-        // Chefs can see orders with items in their kitchen station
-        filters.courses = {
-          some: {
-            OR: [
-              { kitchenStationId: userId },
-              { kitchenStationId: null }, // Unassigned items
-            ],
-          },
-        };
+      case UserRole.STAFF:
+        // Staff members can see tenant-level data
+        filters.tenantId = tenantId;
         break;
     }
 

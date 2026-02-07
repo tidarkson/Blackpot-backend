@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, TableStatus, ReservationStatus, OrderStatus, CourseType, PaymentMethod, TipMethod } from '@prisma/client';
+import { PrismaClient, UserRole, StaffPosition, TableStatus, ReservationStatus, OrderStatus, CourseType, PaymentMethod, TipMethod } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 
 const prisma = new PrismaClient();
@@ -131,7 +131,8 @@ async function main() {
         email: 'server1@blackpot.com',
         name: 'Alex Johnson (Server)',
         passwordHash: '$2b$10$example',
-        role: UserRole.SERVER,
+        role: UserRole.STAFF,
+        positions: [StaffPosition.SERVER],
         isActive: true,
       },
     }),
@@ -142,7 +143,8 @@ async function main() {
         email: 'server2@blackpot.com',
         name: 'Jordan Williams (Server)',
         passwordHash: '$2b$10$example',
-        role: UserRole.SERVER,
+        role: UserRole.STAFF,
+        positions: [StaffPosition.SERVER],
         isActive: true,
       },
     }),
@@ -153,7 +155,8 @@ async function main() {
         email: 'server3@blackpot.com',
         name: 'Casey Lee (Server)',
         passwordHash: '$2b$10$example',
-        role: UserRole.SERVER,
+        role: UserRole.STAFF,
+        positions: [StaffPosition.SERVER],
         isActive: true,
       },
     }),
@@ -164,7 +167,8 @@ async function main() {
         email: 'server4@blackpot.com',
         name: 'Morgan Davis (Server)',
         passwordHash: '$2b$10$example',
-        role: UserRole.SERVER,
+        role: UserRole.STAFF,
+        positions: [StaffPosition.SERVER],
         isActive: true,
       },
     }),
@@ -175,7 +179,8 @@ async function main() {
         email: 'server5@blackpot.com',
         name: 'Riley Martinez (Server)',
         passwordHash: '$2b$10$example',
-        role: UserRole.SERVER,
+        role: UserRole.STAFF,
+        positions: [StaffPosition.SERVER],
         isActive: true,
       },
     }),
@@ -186,7 +191,8 @@ async function main() {
         email: 'host@blackpot.com',
         name: 'Sam Taylor (Host)',
         passwordHash: '$2b$10$example',
-        role: UserRole.HOST,
+        role: UserRole.STAFF,
+        positions: [StaffPosition.HOST],
         isActive: true,
       },
     }),
@@ -197,7 +203,8 @@ async function main() {
         email: 'chef@blackpot.com',
         name: 'Executive Chef',
         passwordHash: '$2b$10$example',
-        role: UserRole.CHEF,
+        role: UserRole.STAFF,
+        positions: [StaffPosition.CHEF],
         isActive: true,
       },
     }),
@@ -208,7 +215,8 @@ async function main() {
         email: 'sous1@blackpot.com',
         name: 'Sous Chef 1',
         passwordHash: '$2b$10$example',
-        role: UserRole.CHEF,
+        role: UserRole.STAFF,
+        positions: [StaffPosition.CHEF],
         isActive: true,
       },
     }),
@@ -219,7 +227,8 @@ async function main() {
         email: 'sous2@blackpot.com',
         name: 'Sous Chef 2',
         passwordHash: '$2b$10$example',
-        role: UserRole.CHEF,
+        role: UserRole.STAFF,
+        positions: [StaffPosition.CHEF],
         isActive: true,
       },
     }),
@@ -230,7 +239,8 @@ async function main() {
         email: 'sommelier@blackpot.com',
         name: 'Wine Sommelier',
         passwordHash: '$2b$10$example',
-        role: UserRole.SOMMELIER,
+        role: UserRole.STAFF,
+        positions: [StaffPosition.SOMMELIER],
         isActive: true,
       },
     }),
@@ -578,7 +588,7 @@ async function main() {
     const randomDayOffset = Math.floor(Math.random() * 30);
     const randomDay = businessDays[randomDayOffset];
     const randomTable = tables[Math.floor(Math.random() * tables.length)];
-    const randomServer = users.filter((u) => u.role === UserRole.SERVER)[
+    const randomServer = users.filter((u) => u.role === UserRole.STAFF && u.positions.includes(StaffPosition.SERVER))[
       Math.floor(Math.random() * 5)
     ];
 
@@ -878,27 +888,34 @@ async function main() {
     });
   }
 
-  // Create shifts
-  console.log('👔 Creating shifts...');
-  for (let i = 0; i < 10; i++) {
-    const dayOffset = Math.floor(i / 2);
-    const shiftDate = new Date(now);
-    shiftDate.setDate(shiftDate.getDate() - dayOffset);
+  // Create shifts - skipped for now as Shift table not in base migrations yet
+  // console.log('👔 Creating shifts...');
+  // for (let i = 0; i < 10; i++) {
+  //   const dayOffset = Math.floor(i / 2);
+  //   const shiftDate = new Date(now);
+  //   shiftDate.setDate(shiftDate.getDate() - dayOffset);
 
-    const randomServer = users.filter((u) => u.role === UserRole.SERVER)[
-      Math.floor(Math.random() * 5)
-    ];
+  //   const randomServer = users.filter((u) => u.role === UserRole.SERVER)[
+  //     Math.floor(Math.random() * 5)
+  //   ];
 
-    await prisma.shift.create({
-      data: {
-        tenantId: tenant.id,
-        userId: randomServer.id,
-        role: randomServer.role,
-        startAt: new Date(shiftDate.setHours(11, 0, 0, 0)),
-        endAt: new Date(shiftDate.setHours(23, 0, 0, 0)),
-      },
-    });
-  }
+  //   const shiftStart = new Date(shiftDate);
+  //   shiftStart.setHours(11, 0, 0, 0);
+  //   const shiftEnd = new Date(shiftDate);
+  //   shiftEnd.setHours(23, 0, 0, 0);
+
+  //   await prisma.shift.create({
+  //     data: {
+  //       tenantId: tenant.id,
+  //       userId: randomServer.id,
+  //       roleAssigned: randomServer.role.toString(),
+  //       scheduledDate: shiftDate,
+  //       scheduledStart: shiftStart,
+  //       scheduledEnd: shiftEnd,
+  //       status: 'SCHEDULED',
+  //     },
+  //   });
+  // }
 
   console.log('✅ Seeding completed successfully!');
   console.log('\n📊 Summary:');

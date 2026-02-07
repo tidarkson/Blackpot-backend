@@ -15,9 +15,9 @@ declare global {
 const authService = new AuthService();
 
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
-  const token = req.headers.authorization?.replace('bearer ', '');
-
-  if (!token) {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader) {
     return res.status(401).json({
       status: 'error',
       code: 401,
@@ -26,8 +26,22 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     });
   }
 
+  // Handle both "Bearer token" and "bearer token" (case-insensitive)
+  const token = authHeader.startsWith('Bearer ') || authHeader.startsWith('bearer ')
+    ? authHeader.slice(7)
+    : null;
+
+  if (!token) {
+    return res.status(401).json({
+      status: 'error',
+      code: 401,
+      error: 'INVALID_TOKEN',
+      message: 'Invalid authorization header format. Expected: Bearer <token>',
+    });
+  }
+
   try {
-    const payload = await authService.verifyToken(token);
+    const payload = authService.verifyToken(token);
     req.user = payload;
     next();
   } catch (error) {

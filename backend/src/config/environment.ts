@@ -19,9 +19,12 @@ export const config = {
   // Database
   DATABASE_URL: process.env.DATABASE_URL as string,
   
-  // JWT
+  // JWT Configuration
+  // Note: Shorter expiry times are more secure
+  // Access tokens: 15 minutes (short-lived)
+  // Refresh tokens: 7 days (long-lived, requires refresh endpoint)
   JWT_SECRET: process.env.JWT_SECRET as string,
-  JWT_EXPIRY: process.env.JWT_EXPIRY || '24h',
+  JWT_EXPIRY: process.env.JWT_EXPIRY || '15m',
   REFRESH_TOKEN_EXPIRY: process.env.REFRESH_TOKEN_EXPIRY || '7d',
   
   // Logging
