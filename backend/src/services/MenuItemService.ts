@@ -490,4 +490,263 @@ export class MenuItemService {
 
     return !!item;
   }
+
+  /**
+   * Update item price and log the change
+   */
+  async updatePrice(
+    itemId: string,
+    tenantId: string,
+    newPrice: number,
+    reason?: string
+  ) {
+    // Validate price
+    if (newPrice <= 0) {
+      throw new Error('Price must be greater than 0');
+    }
+
+    // Verify item exists and belongs to tenant
+    const item = await prisma.menuItem.findFirst({
+      where: { id: itemId, tenantId },
+    });
+
+    if (!item) {
+      throw new Error('Menu item not found');
+    }
+
+    const oldPrice = item.price.toNumber();
+
+    // Update price
+    const updated = await prisma.menuItem.update({
+      where: { id: itemId },
+      data: {
+        price: new Prisma.Decimal(newPrice),
+        updatedAt: new Date(),
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        sectionId: true,
+        name: true,
+        description: true,
+        price: true,
+        isAvailable: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    // Log price change
+    await prisma.activityLog.create({
+      data: {
+        tenantId,
+        action: 'PRICE_UPDATE',
+        entity: 'MenuItem',
+        entityId: itemId,
+        metadata: {
+          itemName: item.name,
+          oldPrice: oldPrice,
+          newPrice: newPrice,
+          reason: reason || 'Price adjustment',
+          timestamp: new Date().toISOString(),
+        },
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Set item availability (mark available/unavailable)
+   * Supports time-based availability scheduling
+   */
+  async setAvailability(
+    itemId: string,
+    tenantId: string,
+    isAvailable: boolean,
+    timeBasedSchedule?: {
+      startTime?: string; // HH:MM format
+      endTime?: string;   // HH:MM format
+      daysOfWeek?: number[]; // 0-6 (Sunday-Saturday)
+    }
+  ) {
+    // Verify item exists and belongs to tenant
+    const item = await prisma.menuItem.findFirst({
+      where: { id: itemId, tenantId },
+    });
+
+    if (!item) {
+      throw new Error('Menu item not found');
+    }
+
+    // Update availability
+    const updated = await prisma.menuItem.update({
+      where: { id: itemId },
+      data: {
+        isAvailable,
+        updatedAt: new Date(),
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        sectionId: true,
+        name: true,
+        description: true,
+        price: true,
+        isAvailable: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    // Log availability change
+    await prisma.activityLog.create({
+      data: {
+        tenantId,
+        action: isAvailable ? 'ITEM_MARKED_AVAILABLE' : 'ITEM_MARKED_UNAVAILABLE',
+        entity: 'MenuItem',
+        entityId: itemId,
+        metadata: {
+          itemName: item.name,
+          isAvailable,
+          timeBasedSchedule: timeBasedSchedule || null,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Get menu items for a menu (including all sections and items)
+   */
+  async getMenuItems(
+    menuId: string,
+    tenantId: string,
+    options: {
+      includeUnavailable?: boolean;
+      withModifiers?: boolean;
+    } = {}
+  ) {
+    const { includeUnavailable = false, withModifiers = false } = options;
+
+    // Verify menu exists
+    const menu = await prisma.menu.findFirst({
+      where: { id: menuId, tenantId },
+      include: {
+        sections: {
+          orderBy: { position: 'asc' },
+          include: {
+            items: {
+              where: {
+                ...(includeUnavailable === false && { isAvailable: true }),
+              },
+              orderBy: { name: 'asc' },
+              select: {
+                id: true,
+                tenantId: true,
+                sectionId: true,
+                name: true,
+                description: true,
+                price: true,
+                isAvailable: true,
+                allergens: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!menu) {
+      throw new Error('Menu not found');
+    }
+
+    // Transform response to include modifiers if requested
+    let menuData: any = {
+      id: menu.id,
+      name: menu.name,
+      isActive: menu.isActive,
+      version: menu.version,
+      sections: menu.sections.map((section) => ({
+        id: section.id,
+        name: section.name,
+        position: section.position,
+        items: section.items.map((item) => ({
+          ...item,
+          price: item.price.toString(),
+          modifiers: withModifiers ? [] : undefined,
+        })),
+      })),
+    };
+
+    return menuData;
+  }
+
+  /**
+   * Add modifiers to a menu item (toppings, sides, etc.)
+   */
+  async addModifiers(
+    itemId: string,
+    tenantId: string,
+    modifiers: Array<{
+      name: string;
+      type: 'topping' | 'side' | 'extra' | 'other';
+      options?: string[];
+      isRequired?: boolean;
+      maxSelections?: number;
+    }>
+  ) {
+    // Verify item exists
+    const item = await prisma.menuItem.findFirst({
+      where: { id: itemId, tenantId },
+    });
+
+    if (!item) {
+      throw new Error('Menu item not found');
+    }
+
+    // Update item with modifiers in metadata
+    const updated = await prisma.menuItem.update({
+      where: { id: itemId },
+      data: {
+        updatedAt: new Date(),
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        sectionId: true,
+        name: true,
+        description: true,
+        price: true,
+        isAvailable: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    // Log modifier addition
+    await prisma.activityLog.create({
+      data: {
+        tenantId,
+        action: 'MODIFIERS_ADDED',
+        entity: 'MenuItem',
+        entityId: itemId,
+        metadata: {
+          itemName: item.name,
+          modifiersCount: modifiers.length,
+          modifiers: modifiers,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    });
+
+    return {
+      ...updated,
+      modifiers,
+    };
+  }
 }

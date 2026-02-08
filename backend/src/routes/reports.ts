@@ -1,9 +1,10 @@
 import { Router } from 'express';
-import { reportController } from '../controllers/ReportController';
+import { ReportController } from '../controllers/ReportController';
 import { authenticate } from '../middleware/auth';
 import { ensureTenantAccess } from '../middleware/tenantIsolation';
 
 const router = Router();
+const reportController = new ReportController();
 
 /**
  * Report Routes

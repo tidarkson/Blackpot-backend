@@ -4,7 +4,59 @@ import logger from '../config/logger';
 
 const prisma = new PrismaClient();
 
+export interface DailyRevenueReport {
+  reportDate: Date;
+  totalRevenue: Decimal;
+  totalTips: Decimal;
+  grossRevenue: Decimal;
+  orderCount: number;
+  paymentMethodBreakdown: Array<{ method: string; amount: Decimal; count: number }>;
+}
+
+export interface LaborCostReport {
+  totalLaborCost: Decimal;
+  laborCostPercentage: number;
+  shiftCount: number;
+  overtimeHours?: number;
+}
+
+export interface FoodCostReport {
+  totalFoodCost: Decimal;
+  foodCostPercentage: number;
+  itemCount: number;
+}
+
+export interface ProfitAndLossReport {
+  revenue: Decimal;
+  foodCost: Decimal;
+  laborCost: Decimal;
+  totalExpenses: Decimal;
+  grossProfit: Decimal;
+  netProfit: Decimal;
+}
+
+export interface DateRangeReport {
+  startDate: Date;
+  endDate: Date;
+  totalRevenue: Decimal;
+  totalExpenses: Decimal;
+  grossProfit: Decimal;
+  netProfit: Decimal;
+  orderCount: number;
+  averageOrderValue: Decimal;
+}
+
+export interface TaxReport {
+  totalTaxLiability: Decimal;
+  period: { startDate: Date; endDate: Date };
+  taxByType: Array<{ type: string; amount: Decimal }>;
+  formattedForSubmission: boolean;
+}
+
 export class ReportService {
+  constructor(private prismaClient?: PrismaClient) {
+    this.prismaClient = prismaClient || prisma;
+  }
   /**
    * Generate daily sales report
    *
@@ -414,6 +466,359 @@ export class ReportService {
       };
     } catch (error: any) {
       logger.error('Error generating financial report:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get daily revenue for a specific date
+   *
+   * @param tenantId - Tenant identifier
+   * @param date - The date to generate revenue report for
+   * @returns DailyRevenueReport with revenue breakdown
+   */
+  async getDailyRevenue(tenantId: string, date: Date): Promise<DailyRevenueReport> {
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const orders = await this.prismaClient!.order.findMany({
+        where: {
+          tenantId,
+          closedAt: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+          status: { not: 'CANCELLED' },
+        },
+        include: {
+          payments: true,
+          tips: true,
+        },
+      });
+
+      const totalRevenue = orders.reduce((sum, o) => sum.plus(o.total), new Decimal(0));
+      const totalTips = orders.reduce(
+        (sum, o) => sum.plus(o.tips.reduce((s, t) => s.plus(t.amount), new Decimal(0))),
+        new Decimal(0)
+      );
+
+      // Payment method breakdown
+      const paymentBreakdown: Record<string, { method: string; amount: Decimal; count: number }> = {};
+      orders.forEach((order) => {
+        order.payments.forEach((payment) => {
+          if (!paymentBreakdown[payment.method]) {
+            paymentBreakdown[payment.method] = {
+              method: payment.method,
+              amount: new Decimal(0),
+              count: 0,
+            };
+          }
+          paymentBreakdown[payment.method].amount = paymentBreakdown[payment.method].amount.plus(
+            payment.amount
+          );
+          paymentBreakdown[payment.method].count += 1;
+        });
+      });
+
+      return {
+        reportDate: date,
+        totalRevenue,
+        totalTips,
+        grossRevenue: totalRevenue.plus(totalTips),
+        orderCount: orders.length,
+        paymentMethodBreakdown: Object.values(paymentBreakdown),
+      };
+    } catch (error: any) {
+      logger.error('Error calculating daily revenue:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get labor costs for a date range
+   *
+   * @param tenantId - Tenant identifier
+   * @param startDate - Start date of the range
+   * @param endDate - End date of the range
+   * @returns LaborCostReport with labor cost breakdown
+   */
+  async getLaborCost(tenantId: string, startDate: Date, endDate: Date): Promise<LaborCostReport> {
+    try {
+      const shifts = await this.prismaClient!.shift.findMany({
+        where: {
+          tenantId,
+          scheduledDate: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      let totalLaborCost = new Decimal(0);
+      let totalOvertimeHours = 0;
+
+      shifts.forEach((shift) => {
+        if (shift.laborCost) {
+          totalLaborCost = totalLaborCost.plus(shift.laborCost);
+        }
+
+        // Calculate overtime (hours > 8 per day)
+        if (shift.hoursWorked && new Decimal(shift.hoursWorked).gt(8)) {
+          totalOvertimeHours += new Decimal(shift.hoursWorked).minus(8).toNumber();
+        }
+      });
+
+      // Get total revenue for percentage calculation
+      const startOfRange = new Date(startDate);
+      startOfRange.setHours(0, 0, 0, 0);
+      const endOfRange = new Date(endDate);
+      endOfRange.setHours(23, 59, 59, 999);
+
+      const orders = await this.prismaClient!.order.findMany({
+        where: {
+          tenantId,
+          closedAt: {
+            gte: startOfRange,
+            lte: endOfRange,
+          },
+        },
+      });
+
+      const totalRevenue = orders.reduce((sum, o) => sum.plus(o.total), new Decimal(0));
+      const laborCostPercentage = totalRevenue.gt(0)
+        ? totalLaborCost.div(totalRevenue).mul(100).toNumber()
+        : 0;
+
+      return {
+        totalLaborCost,
+        laborCostPercentage,
+        shiftCount: shifts.length,
+        overtimeHours: totalOvertimeHours,
+      };
+    } catch (error: any) {
+      logger.error('Error calculating labor cost:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get food/COGS costs for a date range
+   *
+   * @param tenantId - Tenant identifier
+   * @param startDate - Start date of the range
+   * @param endDate - End date of the range
+   * @returns FoodCostReport with food cost breakdown
+   */
+  async getFoodCost(tenantId: string, startDate: Date, endDate: Date): Promise<FoodCostReport> {
+    try {
+      const movements = await this.prismaClient!.stockMovement.findMany({
+        where: {
+          tenantId,
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+          type: { not: 'WASTE' }, // Exclude waste from food cost
+        },
+        include: {
+          item: true,
+        },
+      });
+
+      let totalFoodCost = new Decimal(0);
+
+      movements.forEach((movement) => {
+        const itemCost = movement.item.unitCost.mul(movement.quantity);
+        totalFoodCost = totalFoodCost.plus(itemCost);
+      });
+
+      // Get total revenue for percentage calculation
+      const endOfRange = new Date(endDate);
+      endOfRange.setHours(23, 59, 59, 999);
+
+      const orders = await this.prismaClient!.order.findMany({
+        where: {
+          tenantId,
+          closedAt: {
+            gte: startDate,
+            lte: endOfRange,
+          },
+        },
+      });
+
+      const totalRevenue = orders.reduce((sum, o) => sum.plus(o.total), new Decimal(0));
+      const foodCostPercentage = totalRevenue.gt(0)
+        ? totalFoodCost.div(totalRevenue).mul(100).toNumber()
+        : 0;
+
+      return {
+        totalFoodCost,
+        foodCostPercentage,
+        itemCount: movements.length,
+      };
+    } catch (error: any) {
+      logger.error('Error calculating food cost:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get profit and loss statement for a date
+   *
+   * @param tenantId - Tenant identifier
+   * @param date - The date to generate P&L for
+   * @returns ProfitAndLossReport with detailed breakdown
+   */
+  async getProfitAndLoss(tenantId: string, date: Date): Promise<ProfitAndLossReport> {
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Get revenue
+      const dailyRevenue = await this.getDailyRevenue(tenantId, date);
+      const revenue = dailyRevenue.totalRevenue;
+
+      // Get food cost
+      const foodCostReport = await this.getFoodCost(tenantId, startOfDay, endOfDay);
+      const foodCost = foodCostReport.totalFoodCost;
+
+      // Get labor cost
+      const laborCostReport = await this.getLaborCost(tenantId, startOfDay, endOfDay);
+      const laborCost = laborCostReport.totalLaborCost;
+
+      // Calculate totals
+      const totalExpenses = foodCost.plus(laborCost);
+      const grossProfit = revenue.minus(foodCost);
+      const netProfit = revenue.minus(totalExpenses);
+
+      return {
+        revenue,
+        foodCost,
+        laborCost,
+        totalExpenses,
+        grossProfit,
+        netProfit,
+      };
+    } catch (error: any) {
+      logger.error('Error generating P&L report:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get aggregated report for a date range
+   *
+   * @param tenantId - Tenant identifier
+   * @param startDate - Start date of the range
+   * @param endDate - End date of the range
+   * @returns DateRangeReport with aggregated financials
+   */
+  async getReportByDateRange(tenantId: string, startDate: Date, endDate: Date): Promise<DateRangeReport> {
+    try {
+      const endOfRange = new Date(endDate);
+      endOfRange.setHours(23, 59, 59, 999);
+
+      const orders = await this.prismaClient!.order.findMany({
+        where: {
+          tenantId,
+          closedAt: {
+            gte: startDate,
+            lte: endOfRange,
+          },
+        },
+        include: {
+          payments: true,
+          tips: true,
+        },
+      });
+
+      const totalRevenue = orders.reduce((sum, o) => sum.plus(o.total), new Decimal(0));
+
+      // Get food cost
+      const foodCostReport = await this.getFoodCost(tenantId, startDate, endOfRange);
+      const foodCost = foodCostReport.totalFoodCost;
+
+      // Get labor cost
+      const laborCostReport = await this.getLaborCost(tenantId, startDate, endOfRange);
+      const laborCost = laborCostReport.totalLaborCost;
+
+      // Calculate totals
+      const totalExpenses = foodCost.plus(laborCost);
+      const grossProfit = totalRevenue.minus(foodCost);
+      const netProfit = totalRevenue.minus(totalExpenses);
+      const averageOrderValue = orders.length > 0 ? totalRevenue.div(orders.length) : new Decimal(0);
+
+      return {
+        startDate,
+        endDate,
+        totalRevenue,
+        totalExpenses,
+        grossProfit,
+        netProfit,
+        orderCount: orders.length,
+        averageOrderValue,
+      };
+    } catch (error: any) {
+      logger.error('Error generating date range report:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Get tax report for a date range
+   *
+   * @param tenantId - Tenant identifier
+   * @param startDate - Start date of the range
+   * @param endDate - End date of the range
+   * @returns TaxReport with tax breakdown by type
+   */
+  async getTaxReport(tenantId: string, startDate: Date, endDate: Date): Promise<TaxReport> {
+    try {
+      const endOfRange = new Date(endDate);
+      endOfRange.setHours(23, 59, 59, 999);
+
+      const orders = await this.prismaClient!.order.findMany({
+        where: {
+          tenantId,
+          closedAt: {
+            gte: startDate,
+            lte: endOfRange,
+          },
+        },
+      });
+
+      // Sum all taxes collected
+      const totalTaxLiability = orders.reduce((sum, o) => sum.plus(o.tax), new Decimal(0));
+
+      // Group by tax type (currently all sales tax in this implementation)
+      const taxByType = [
+        {
+          type: 'SALES_TAX',
+          amount: totalTaxLiability,
+        },
+      ];
+
+      return {
+        totalTaxLiability,
+        period: {
+          startDate,
+          endDate,
+        },
+        taxByType,
+        formattedForSubmission: true,
+      };
+    } catch (error: any) {
+      logger.error('Error generating tax report:', error.message);
       throw error;
     }
   }

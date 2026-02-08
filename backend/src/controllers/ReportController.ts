@@ -173,6 +173,78 @@ export class ReportController {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
-}
 
-export const reportController = new ReportController();
+  async getDailyReport(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId;
+      const date = typeof req.params.date === 'string' ? req.params.date : req.params.date[0];
+
+      if (!tenantId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      // Validate date format
+      const parsedDate = new Date(date);
+      if (isNaN(parsedDate.getTime())) {
+        res.status(400).json({
+          error: 'Invalid date format. Use YYYY-MM-DD',
+        });
+        return;
+      }
+
+      const report = await this.reportService.getProfitAndLoss(tenantId, parsedDate);
+      res.json({
+        date: parsedDate,
+        ...report,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  }
+
+  /**
+   * GET /api/reports/monthly/:month/:year
+   * 
+   * Get monthly summary report
+   * @param month - Month number (1-12)
+   * @param year - Year (e.g., 2026)
+   * @returns Monthly financial summary
+   */
+  async getMonthlyReport(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId;
+      const month = typeof req.params.month === 'string' ? req.params.month : req.params.month[0];
+      const year = typeof req.params.year === 'string' ? req.params.year : req.params.year[0];
+
+      if (!tenantId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const monthNum = parseInt(month, 10);
+      const yearNum = parseInt(year, 10);
+
+      // Validate month and year
+      if (isNaN(monthNum) || isNaN(yearNum) || monthNum < 1 || monthNum > 12 || yearNum < 1900) {
+        res.status(400).json({
+          error: 'Invalid month or year format. Month should be 1-12, year should be valid.',
+        });
+        return;
+      }
+
+      // Create date range for the month
+      const startDate = new Date(yearNum, monthNum - 1, 1);
+      const endDate = new Date(yearNum, monthNum, 0); // Last day of the month
+
+      const report = await this.reportService.getReportByDateRange(tenantId, startDate, endDate);
+      res.json({
+        month: monthNum,
+        year: yearNum,
+        ...report,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  }
+}

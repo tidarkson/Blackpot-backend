@@ -262,4 +262,193 @@ export class MenuService {
 
     return !!menu;
   }
+
+  /**
+   * Add section to menu
+   */
+  async addSection(
+    menuId: string,
+    tenantId: string,
+    data: {
+      name: string;
+      position?: number;
+    }
+  ) {
+    // Validate menu exists
+    if (!data.name || data.name.trim().length === 0) {
+      throw new Error('Section name is required');
+    }
+
+    const menu = await prisma.menu.findFirst({
+      where: { id: menuId, tenantId },
+    });
+
+    if (!menu) {
+      throw new Error('Menu not found');
+    }
+
+    // Get max position
+    const maxPosition = await prisma.menuSection.aggregate({
+      where: { menuId },
+      _max: { position: true },
+    });
+
+    const position = data.position ?? ((maxPosition._max.position ?? 0) + 1);
+
+    const section = await prisma.menuSection.create({
+      data: {
+        tenantId,
+        menuId,
+        name: data.name,
+        position,
+      },
+    });
+
+    return section;
+  }
+
+  /**
+   * Activate menu (switch active menu, deactivate others)
+   */
+  async activateMenu(menuId: string, tenantId: string) {
+    // Verify menu exists
+    const menu = await prisma.menu.findFirst({
+      where: { id: menuId, tenantId },
+    });
+
+    if (!menu) {
+      throw new Error('Menu not found');
+    }
+
+    // Deactivate all other menus
+    await prisma.menu.updateMany({
+      where: { tenantId, isActive: true },
+      data: { isActive: false },
+    });
+
+    // Activate the target menu
+    const activated = await prisma.menu.update({
+      where: { id: menuId },
+      data: {
+        isActive: true,
+        effectiveAt: new Date(),
+      },
+      include: {
+        sections: {
+          orderBy: { position: 'asc' },
+          include: {
+            items: {
+              where: { isAvailable: true },
+              orderBy: { name: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    // Log the activity
+    await prisma.activityLog.create({
+      data: {
+        tenantId,
+        action: 'MENU_ACTIVATED',
+        entity: 'Menu',
+        entityId: menuId,
+        metadata: {
+          menuName: menu.name,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    });
+
+    return activated;
+  }
+
+  /**
+   * Get the active menu for the tenant
+   */
+  async getActiveMenu(tenantId: string) {
+    const menu = await prisma.menu.findFirst({
+      where: {
+        tenantId,
+        isActive: true,
+      },
+      include: {
+        sections: {
+          orderBy: { position: 'asc' },
+          include: {
+            items: {
+              where: { isAvailable: true },
+              orderBy: { name: 'asc' },
+            },
+          },
+        },
+      },
+    });
+
+    return menu;
+  }
+
+  /**
+   * Soft delete menu (mark as inactive instead of hard delete)
+   */
+  async softDeleteMenu(menuId: string, tenantId: string) {
+    // Verify menu exists
+    const menu = await prisma.menu.findFirst({
+      where: { id: menuId, tenantId },
+    });
+
+    if (!menu) {
+      throw new Error('Menu not found');
+    }
+
+    // Prevent deletion if menu is active
+    if (menu.isActive) {
+      throw new Error('Cannot delete active menu. Deactivate it first.');
+    }
+
+    // Mark as inactive (soft delete)
+    const deleted = await prisma.menu.update({
+      where: { id: menuId },
+      data: {
+        isActive: false,
+        updatedAt: new Date(),
+      },
+    });
+
+    // Log the activity
+    await prisma.activityLog.create({
+      data: {
+        tenantId,
+        action: 'MENU_DELETED',
+        entity: 'Menu',
+        entityId: menuId,
+        metadata: {
+          menuName: menu.name,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    });
+
+    return deleted;
+  }
+
+  /**
+   * Log menu change
+   */
+  async logMenuChange(
+    tenantId: string,
+    menuId: string,
+    action: string,
+    metadata?: any
+  ) {
+    return await prisma.activityLog.create({
+      data: {
+        tenantId,
+        action,
+        entity: 'Menu',
+        entityId: menuId,
+        metadata,
+      },
+    });
+  }
 }

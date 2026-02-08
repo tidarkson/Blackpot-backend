@@ -209,4 +209,53 @@ router.get('/templates/suggestions', authenticate, ensureTenantAccess, (req: Req
   advancedSchedulingController.getTemplateSuggestions(req, res)
 );
 
+// =====================
+// ADVANCED SCHEDULING ROUTES (Feature A5)
+// =====================
+
+/**
+ * POST /api/advanced/forecast-demand
+ * Forecast customer demand for a specific date
+ * Body: { date: string (ISO format) }
+ */
+router.post('/forecast-demand', authenticate, ensureTenantAccess, (req: Request, res: Response) =>
+  advancedSchedulingController.forecastDemand(req, res)
+);
+
+/**
+ * POST /api/advanced/recommend-staffing
+ * Get staffing recommendations based on demand forecast
+ * Body: { date: string (ISO format) }
+ */
+router.post('/recommend-staffing', authenticate, ensureTenantAccess, (req: Request, res: Response) =>
+  advancedSchedulingController.recommendStaffing(req, res)
+);
+
+/**
+ * POST /api/advanced/optimize-schedule
+ * Optimize schedule for a group of staff members
+ * Body: { staffIds: string[], startDate: string, endDate: string }
+ */
+router.post('/optimize-schedule', authenticate, ensureTenantAccess, (req: Request, res: Response) =>
+  advancedSchedulingController.optimizeSchedule(req, res)
+);
+
+/**
+ * GET /api/advanced/detect-conflicts
+ * Detect scheduling conflicts in a date range
+ * Query: startDate, endDate
+ */
+router.get('/detect-conflicts', authenticate, ensureTenantAccess, (req: Request, res: Response) =>
+  advancedSchedulingController.detectConflicts(req, res)
+);
+
+/**
+ * GET /api/advanced/schedule-report
+ * Generate comprehensive schedule report
+ * Query: startDate, endDate
+ */
+router.get('/schedule-report', authenticate, ensureTenantAccess, (req: Request, res: Response) =>
+  advancedSchedulingController.generateScheduleReport(req, res)
+);
+
 export default router;

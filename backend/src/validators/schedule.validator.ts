@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { StaffRoleEnum } from './staff.validator';
+import { StaffRoleEnum, StaffPositionEnum } from './staff.validator';
 
 /**
  * Schedule/Shift Management Validators
@@ -34,9 +34,9 @@ export const createScheduleSchema = z.object({
   scheduledDate: z.string().datetime('Invalid date format'),
   scheduledStart: z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:MM format'),
   scheduledEnd: z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:MM format'),
-  roleAssigned: StaffRoleEnum,
+  roleAssigned: StaffPositionEnum,
   sectionAssigned: z.string().optional(), // For servers
-  breakMinutes: z.coerce.number().nonnegative().default(0),
+  breakMinutes: z.coerce.number().nonnegative().default(0).optional(),
   notes: z.string().optional(),
 })
   .superRefine((data, ctx) => {
@@ -73,7 +73,7 @@ export const updateScheduleSchema = z.object({
   scheduledDate: z.string().datetime().optional(),
   scheduledStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   scheduledEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  roleAssigned: StaffRoleEnum.optional(),
+  roleAssigned: StaffPositionEnum.optional(),
   sectionAssigned: z.string().optional(),
   breakMinutes: z.coerce.number().nonnegative().optional(),
   notes: z.string().optional(),
@@ -110,7 +110,7 @@ export type BulkCreateScheduleRequest = z.infer<typeof bulkCreateScheduleSchema>
 // Schedule filters/queries
 export const scheduleFiltersSchema = z.object({
   userId: z.string().uuid().optional(),
-  roleAssigned: StaffRoleEnum.optional(),
+  roleAssigned: StaffPositionEnum.optional(),
   sectionAssigned: z.string().optional(),
   status: ShiftStatusEnum.optional(),
   startDate: z.string().datetime().optional(),
@@ -151,7 +151,7 @@ export type CopyPreviousWeekRequest = z.infer<typeof copyPreviousWeekSchema>;
 // Week view query
 export const weekScheduleQuerySchema = z.object({
   date: z.string().datetime('Invalid date format'),
-  roleFilter: StaffRoleEnum.optional(),
+  roleFilter: StaffPositionEnum.optional(),
   includeConflicts: z.boolean().default(true),
 });
 

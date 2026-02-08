@@ -1,5 +1,5 @@
 import { PrismaClient, UserRole } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/environment';
 import { JWTPayload, AuthResponse } from '../types/auth';

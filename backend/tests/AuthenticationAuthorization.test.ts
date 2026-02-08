@@ -2,7 +2,7 @@ import { PrismaClient, UserRole } from '@prisma/client';
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
 import express, { Express } from 'express';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { AuthService } from '../src/services/AuthService';
 import { PasswordResetService } from '../src/services/PasswordResetService';

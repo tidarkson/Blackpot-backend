@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { laborCostService } from '../services/LaborCostService';
 import { coverageTrackingService } from '../services/CoverageTrackingService';
 import { shiftTemplateService } from '../services/ShiftTemplateService';
+import { advancedSchedulingService } from '../services/AdvancedSchedulingService';
 import { createShiftTemplateSchema, updateShiftTemplateSchema, createCoverageRequirementSchema, updateCoverageRequirementSchema, applyTemplateSchema, applyMultipleTemplatesSchema } from '../validators/templates-coverage.validator';
 
 /**
@@ -291,6 +292,133 @@ export class AdvancedSchedulingController {
       }
       const suggestions = await shiftTemplateService.getSuggestions(tenantId, roleRequired);
       res.json({ status: 'success', data: suggestions });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+
+  // =====================================================================
+  // ADVANCED SCHEDULING ENDPOINTS (Feature A5)
+  // =====================================================================
+
+  /**
+   * POST /api/advanced/forecast-demand
+   * Forecast customer demand for a specific date
+   */
+  async forecastDemand(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId!;
+      const { date } = req.body as { date?: string };
+      if (!date) {
+        res.status(400).json({ error: 'Missing required field: date' });
+        return;
+      }
+      const forecast = await advancedSchedulingService.forecastDemand(tenantId, new Date(date));
+      res.json({ status: 'success', data: forecast });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+
+  /**
+   * POST /api/advanced/recommend-staffing
+   * Get staffing recommendations based on demand forecast
+   */
+  async recommendStaffing(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId!;
+      const { date } = req.body as { date?: string };
+      if (!date) {
+        res.status(400).json({ error: 'Missing required field: date' });
+        return;
+      }
+      const forecast = await advancedSchedulingService.forecastDemand(tenantId, new Date(date));
+      const recommendation = await advancedSchedulingService.recommendStaffing(
+        tenantId,
+        new Date(date),
+        forecast
+      );
+      res.json({ status: 'success', data: recommendation });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+
+  /**
+   * POST /api/advanced/optimize-schedule
+   * Optimize schedule for a group of staff members
+   */
+  async optimizeSchedule(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId!;
+      const { staffIds, startDate, endDate } = req.body as {
+        staffIds?: string[];
+        startDate?: string;
+        endDate?: string;
+      };
+      if (!staffIds || !startDate || !endDate) {
+        res.status(400).json({
+          error: 'Missing required fields: staffIds, startDate, endDate',
+        });
+        return;
+      }
+      const optimized = await advancedSchedulingService.optimizeSchedule(
+        tenantId,
+        staffIds,
+        new Date(startDate),
+        new Date(endDate)
+      );
+      res.json({ status: 'success', data: optimized });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+
+  /**
+   * GET /api/advanced/detect-conflicts
+   * Detect scheduling conflicts in a date range
+   */
+  async detectConflicts(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId!;
+      const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
+      if (!startDate || !endDate) {
+        res.status(400).json({
+          error: 'Missing required parameters: startDate, endDate',
+        });
+        return;
+      }
+      const conflicts = await advancedSchedulingService.detectConflicts(
+        tenantId,
+        new Date(startDate),
+        new Date(endDate)
+      );
+      res.json({ status: 'success', data: conflicts });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
+    }
+  }
+
+  /**
+   * GET /api/advanced/schedule-report
+   * Generate comprehensive schedule report
+   */
+  async generateScheduleReport(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId!;
+      const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
+      if (!startDate || !endDate) {
+        res.status(400).json({
+          error: 'Missing required parameters: startDate, endDate',
+        });
+        return;
+      }
+      const report = await advancedSchedulingService.generateScheduleReport(
+        tenantId,
+        new Date(startDate),
+        new Date(endDate)
+      );
+      res.json({ status: 'success', data: report });
     } catch (error: any) {
       res.status(500).json({ status: 'error', message: error.message });
     }
