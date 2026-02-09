@@ -1,0 +1,261 @@
+name: Deploy Backend to AWS Production
+
+# When to run this workflow
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'database/**'
+      - '.github/workflows/deploy-backend.yml'
+      - 'package.json'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  AWS_REGION: af-south-1
+  ECR_REPOSITORY: blackpot-backend
+  ECS_SERVICE: blackpot-backend-prod
+  ECS_CLUSTER: blackpot-prod
+
+jobs:
+  # ============================================================================
+  # JOB 1: BUILD & TEST
+  # ============================================================================
+  build-and-test:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: blackpot_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint --if-present
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://postgres:test@localhost:5432/blackpot_test
+        run: npm test -- --coverage --watchAll=false
+
+      - name: Build application
+        run: npm run build
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/coverage-final.json
+          flags: backend
+          fail_ci_if_error: false
+
+  # ============================================================================
+  # JOB 2: BUILD DOCKER IMAGE
+  # ============================================================================
+  build-image:
+    name: Build Docker Image
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Output image URI
+        id: image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  # ============================================================================
+  # JOB 3: MIGRATION & DB SETUP
+  # ============================================================================
+  database-migration:
+    name: Run Database Migrations
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Prisma migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma migrate deploy
+
+      - name: Verify database schema
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npx prisma db execute --stdin < database/sql/verify-schema.sql
+
+  # ============================================================================
+  # JOB 4: DEPLOY TO ECS/EC2
+  # ============================================================================
+  deploy:
+    name: Deploy to AWS Production
+    needs: [build-image, database-migration]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update ECS service with new image
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Wait for service to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Get service info
+        run: |
+          aws ecs describe-services \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services ${{ env.ECS_SERVICE }} \
+            --region ${{ env.AWS_REGION }}
+
+  # ============================================================================
+  # JOB 5: SMOKE TESTS
+  # ============================================================================
+  smoke-tests:
+    name: Run Smoke Tests
+    needs: deploy
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test health endpoint
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://api.blackpot.restaurant/health)
+          if [ $response -ne 200 ]; then
+            echo "Health check failed with status $response"
+            exit 1
+          fi
+
+      - name: Test API connectivity
+        run: |
+          curl -H "Authorization: Bearer test" https://api.blackpot.restaurant/api/health || exit 1
+
+      - name: Database connectivity check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          npx ts-node -e "
+            import { PrismaClient } from '@prisma/client';
+            const prisma = new PrismaClient();
+            await prisma.\$queryRaw\`SELECT 1\`;
+            console.log('Database connection successful');
+          "
+
+  # ============================================================================
+  # JOB 6: NOTIFICATIONS
+  # ============================================================================
+  notify:
+    name: Send Notifications
+    needs: [deploy, smoke-tests]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Determine status
+        id: status
+        run: |
+          if [ "${{ needs.deploy.result }}" = "success" ] && [ "${{ needs.smoke-tests.result }}" = "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "emoji=✅" >> $GITHUB_OUTPUT
+            echo "message=Deployment successful!" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "emoji=❌" >> $GITHUB_OUTPUT
+            echo "message=Deployment failed!" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ steps.status.outputs.status }}
+          text: |
+            ${{ steps.status.outputs.emoji }} ${{ steps.status.outputs.message }}
+            Repository: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+            Branch: ${{ github.ref }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+
+      - name: Create deployment annotation
+        run: |
+          echo "::notice title=Deployment Status::${{ steps.status.outputs.message }} to production"
+

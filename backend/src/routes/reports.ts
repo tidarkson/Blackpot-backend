@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { ReportController } from '../controllers/ReportController';
+import { cashSessionController } from '../controllers/CashSessionController';
 import { authenticate } from '../middleware/auth';
 import { ensureTenantAccess } from '../middleware/tenantIsolation';
 
@@ -64,6 +65,19 @@ router.post(
   authenticate,
   ensureTenantAccess,
   (req, res) => reportController.generateFinancialReport(req, res)
+);
+
+/**
+ * GET /api/reports/discrepancies
+ * Get cash discrepancy report for date range
+ * Query params: startDate, endDate (ISO format)
+ * Used for financial analysis and staff performance tracking
+ */
+router.get(
+  '/discrepancies',
+  authenticate,
+  ensureTenantAccess,
+  (req, res) => cashSessionController.getDiscrepancyReport(req, res)
 );
 
 export default router;

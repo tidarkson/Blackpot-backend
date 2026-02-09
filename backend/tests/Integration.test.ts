@@ -1,5 +1,7 @@
 import request from 'supertest';
-import { PrismaClient, OrderStatus, CourseType } from '@prisma/client';
+import { PrismaClient, OrderStatus, CourseType, ReservationStatus } from '@prisma/client';
+import ReservationService from '../src/services/ReservationService';
+import AvailabilityService from '../src/services/AvailabilityService';
 
 /**
  * Integration Tests for Order Management API
@@ -10,10 +12,85 @@ describe('Order Management API Integration Tests', () => {
   const API_URL = process.env.API_URL || 'http://localhost:3000/api';
   const authToken = process.env.TEST_AUTH_TOKEN || 'test-token';
 
+  const prisma = new PrismaClient();
+
   let orderId: string;
   let courseId: string;
   let tableId: string = 'table-test-001';
   let serverId: string = 'server-test-001';
+  let testTenantId: string;
+  let testTableId: string;
+  let testUserId: string;
+  let reservationData: any;
+
+  beforeAll(async () => {
+    // Setup test data
+    const tenant = await prisma.tenant.create({
+      data: {
+        name: 'Test Restaurant',
+        isActive: true,
+      },
+    });
+
+    testTenantId = tenant.id;
+
+    const location = await prisma.location.create({
+      data: {
+        tenantId: testTenantId,
+        name: 'Main Location',
+      },
+    });
+
+    const user = await prisma.user.create({
+      data: {
+        tenantId: testTenantId,
+        email: `test-server-${Date.now()}@restaurant.com`,
+        name: 'Test Server',
+        passwordHash: 'hashed',
+        role: 'STAFF',
+        locationId: location.id,
+        positions: ['SERVER'],
+      },
+    });
+
+    testUserId = user.id;
+
+    const table = await prisma.table.create({
+      data: {
+        tenantId: testTenantId,
+        locationId: location.id,
+        name: 'Table 1',
+        capacity: 4,
+        status: 'AVAILABLE',
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+      },
+    });
+
+    testTableId = table.id;
+
+    reservationData = {
+      tableId: testTableId,
+      guestName: 'John Test',
+      guestEmail: 'john.test@example.com',
+      guestPhone: '+1-555-1234',
+      guestCount: 4,
+      reservedAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      notes: 'Test reservation',
+    };
+  });
+
+  afterAll(async () => {
+    // Cleanup test data
+    await prisma.reservation.deleteMany({ where: { tenantId: testTenantId } });
+    await prisma.table.deleteMany({ where: { tenantId: testTenantId } });
+    await prisma.user.deleteMany({ where: { tenantId: testTenantId } });
+    await prisma.location.deleteMany({ where: { tenantId: testTenantId } });
+    await prisma.tenant.deleteMany({ where: { id: testTenantId } });
+    await prisma.$disconnect();
+  });
 
   describe('Order Creation and Management Workflow', () => {
     it('should create a new order', async () => {

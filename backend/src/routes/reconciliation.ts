@@ -11,6 +11,28 @@ const router = Router();
  */
 
 /**
+ * POST /api/reconciliation/run
+ * Run daily reconciliation - aggregates all cash sessions
+ */
+router.post(
+  '/run',
+  authenticate,
+  ensureTenantAccess,
+  (req, res) => reconciliationController.runDailyReconciliation(req, res)
+);
+
+/**
+ * GET /api/reconciliation/:date
+ * Get reconciliation summary for a specific date (YYYY-MM-DD)
+ */
+router.get(
+  '/:date',
+  authenticate,
+  ensureTenantAccess,
+  (req, res) => reconciliationController.getReconciliationByDate(req, res)
+);
+
+/**
  * GET /api/reconciliation/daily
  * Perform daily reconciliation for tenant
  */

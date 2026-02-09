@@ -54,7 +54,8 @@ describe('TableService', () => {
         email: `testserver-${Date.now()}@example.com`,
         name: 'Test Server',
         passwordHash: 'hashedpassword',
-        role: 'SERVER',
+        role: 'STAFF',
+        positions: ['SERVER'],
       },
     });
 

@@ -32,11 +32,12 @@ describe('Customer Management System - Phase 1-5 Implementation Tests', () => {
     const user = await prisma.user.create({
       data: {
         tenantId,
-        email: 'test-server@restaurant.com',
+        email: `test-server-${Date.now()}@restaurant.com`,
         name: 'Test Server',
         passwordHash: 'hashed',
-        role: 'SERVER',
+        role: 'STAFF',
         locationId: location.id,
+        positions: ['SERVER'],
       },
     });
 

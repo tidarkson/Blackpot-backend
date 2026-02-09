@@ -45,6 +45,11 @@ model Tenant {
   shiftConflicts              ShiftConflict[]
   shiftReports                ShiftReport[]                @relation("ShiftReports")
   reconciliationLogs          ReconciliationLog[]          @relation("ReconciliationLogs")
+  reconciliations             Reconciliation[]
+  cashSessions                CashSession[]
+  cashCounts                  CashCount[]
+  cardSettlements             CardSettlement[]
+  discrepancies               Discrepancy[]
   specialRequests             SpecialRequest[]
   tableSections               TableSection[]
   splitPayments               SplitPayment[]
@@ -164,6 +169,8 @@ model User {
   assignedTables              Table[]                      @relation("TableServers")
   staffAvailabilityExceptions StaffAvailabilityException[]
   leaveRequests               LeaveRequest[]
+  cashSessionsOpened          CashSession[]               @relation("CashSessionStaff")
+  cashSessionsReviewed        CashSession[]               @relation("CashSessionReviewer")
 
   @@index([tenantId])
   @@index([role])
@@ -770,6 +777,7 @@ model Shift {
 
   // Shift details
   roleAssigned    String // server, cook, manager, host, bartender, sommelier
+  shiftType       String? // morning, afternoon, evening (for cash reconciliation)
   sectionAssigned String? // For servers - which section
   breakMinutes    Int?     @default(0)
   hoursWorked     Decimal? @db.Decimal(10, 2) // Calculated
@@ -788,6 +796,7 @@ model Shift {
   user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   tips     Tip[]
   clockIns ShiftClockIn[]
+  cashSession CashSession?
 
   @@unique([tenantId, userId, scheduledDate, scheduledStart])
   @@index([userId])
@@ -1009,6 +1018,169 @@ model ReconciliationLog {
 }
 
 // ===============================
+// SHIFT-LEVEL CASH RECONCILIATION
+// ===============================
+
+model CashSession {
+  id                String              @id @default(uuid())
+  tenantId          String
+  shiftId           String              @unique // One-to-one relation to Shift
+  staffId           String              // Staff member who opened the session
+  
+  // Cash tracking
+  openingCash       Decimal             @db.Decimal(12, 2) // Cash register balance at shift start
+  closingCash       Decimal?            @db.Decimal(12, 2) // Physical cash count at shift end
+  expectedCash      Decimal?            @db.Decimal(12, 2) // Expected from orders (calculated)
+  discrepancy       Decimal?            @db.Decimal(12, 2) // closingCash - expectedCash
+  
+  // Card tracking
+  actualCard        Decimal?            @db.Decimal(12, 2) // Actual card amount counted
+  cardDiscrepancy   Decimal?            @db.Decimal(12, 2) // actualCard - expectedCard (if calculated)
+  
+  // Cash denomination breakdown (JSON)
+  cashDenominations Json?               // {"50": 10, "100": 5, "500": 2, "1000": 1}
+  
+  // Status tracking
+  status            String              @default("OPEN") // OPEN, CLOSED, FLAGGED, APPROVED
+  
+  // Timestamps
+  openedAt          DateTime            @default(now())
+  closedAt          DateTime?
+  
+  // Manager review
+  reviewedBy        String?             // Manager who reviewed
+  reviewedAt        DateTime?
+  managerNotes      String?
+  
+  // Audit trail
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shift             Shift               @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  staff             User                @relation("CashSessionStaff", fields: [staffId], references: [id], onDelete: Cascade)
+  reviewer          User?               @relation("CashSessionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  
+  @@index([tenantId])
+  @@index([staffId])
+  @@index([status])
+  @@index([openedAt])
+  @@index([closedAt])
+}
+
+// ===============================
+// END-OF-DAY RECONCILIATION
+// ===============================
+
+model Reconciliation {
+  id                   String                 @id @default(uuid())
+  tenantId             String
+  businessDayId        String
+  reconciliationDate   DateTime
+  status               ReconciliationStatus   @default(PENDING)
+  
+  // Link to individual cash sessions
+  cashSessionIds       String[]               @default([]) // Array of related CashSession IDs
+  
+  expectedCash         Decimal                @db.Decimal(12, 2) // Expected cash from orders
+  actualCash           Decimal?               @db.Decimal(12, 2) // Physical count
+  cardExpected         Decimal                @db.Decimal(12, 2) // Expected from card settlements
+  cardActual           Decimal?               @db.Decimal(12, 2)
+  cashDiscrepancy      Decimal?               @db.Decimal(12, 2) // Shortage/overage
+  cardDiscrepancy      Decimal?               @db.Decimal(12, 2)
+  isLocked             Boolean                @default(false) // Prevents order modifications
+  approvedBy           String?                // User ID who approved
+  approvedAt           DateTime?
+  closedAt             DateTime?
+  notes                String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cashCounts         CashCount[]
+  cardSettlements    CardSettlement[]
+  discrepancies      Discrepancy[]
+
+  @@unique([tenantId, reconciliationDate])
+  @@index([tenantId])
+  @@index([reconciliationDate])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model CashCount {
+  id              String   @id @default(uuid())
+  tenantId        String
+  reconciliationId String
+  denomination    Decimal  @db.Decimal(12, 2) // e.g., 100.00, 50.00, 20.00, 10.00, 5.00, 1.00
+  quantity        Int
+  totalAmount     Decimal  @db.Decimal(12, 2) // denomination * quantity
+  recordedBy      String   // User ID who recorded
+  recordedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reconciliation    Reconciliation  @relation(fields: [reconciliationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([reconciliationId])
+  @@index([recordedAt])
+}
+
+model CardSettlement {
+  id              String   @id @default(uuid())
+  tenantId        String
+  reconciliationId String
+  transactionCount Int
+  settlementAmount Decimal  @db.Decimal(12, 2)
+  processorFees   Decimal  @db.Decimal(10, 2)
+  netAmount       Decimal  @db.Decimal(12, 2) // settlementAmount - processorFees
+  settlementDate  DateTime
+  cardBrand       String?  // VISA, MASTERCARD, AMEX, etc.
+  status          String   @default("VERIFIED") // VERIFIED, UNVERIFIED, DISPUTED
+  verifiedBy      String?  // User ID
+  verifiedAt      DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reconciliation   Reconciliation  @relation(fields: [reconciliationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([reconciliationId])
+  @@index([cardBrand])
+  @@index([status])
+}
+
+model Discrepancy {
+  id              String              @id @default(uuid())
+  tenantId        String
+  reconciliationId String
+  type            DiscrepancyType     // CASH_SHORTAGE, CASH_OVERAGE, UNMATCHED_TRANSACTION, REVERSED_TRANSACTION
+  amount          Decimal             @db.Decimal(12, 2)
+  reason          String? // Explanation or guess
+  severity        DiscrepancySeverity @default(LOW) // LOW, MEDIUM, HIGH
+  status          DiscrepancyStatus   @default(OPEN) // OPEN, UNDER_REVIEW, RESOLVED
+  resolvedBy      String? // User ID who resolved
+  resolution      String? // How it was resolved
+  resolvedAt      DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reconciliation   Reconciliation  @relation(fields: [reconciliationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([reconciliationId])
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+}
+
+// ===============================
 // WAITLIST (FUTURE)
 // ===============================
 
@@ -1159,4 +1331,32 @@ enum WaitlistStatus {
   NOTIFIED
   SEATED
   CANCELLED
+}
+
+enum ReconciliationStatus {
+  PENDING
+  IN_PROGRESS
+  LOCKED
+  COMPLETED
+  FAILED
+  ARCHIVED
+}
+
+enum DiscrepancyType {
+  CASH_SHORTAGE
+  CASH_OVERAGE
+  UNMATCHED_TRANSACTION
+  REVERSED_TRANSACTION
+}
+
+enum DiscrepancySeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DiscrepancyStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
 }

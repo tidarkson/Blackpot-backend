@@ -1,0 +1,238 @@
+name: Deploy Frontend to Vercel Production
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - 'package.json'
+      - '.github/workflows/deploy-frontend.yml'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # ============================================================================
+  # JOB 1: BUILD & TEST
+  # ============================================================================
+  build-and-test:
+    name: Build & Test Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run linter
+        run: |
+          cd frontend
+          npm run lint --if-present
+
+      - name: Build application
+        run: |
+          cd frontend
+          npm run build
+        env:
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
+          REACT_APP_PAYSTACK_PUBLIC_KEY: ${{ secrets.REACT_APP_PAYSTACK_PUBLIC_KEY }}
+          REACT_APP_SOCKET_URL: ${{ secrets.REACT_APP_SOCKET_URL }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/build
+
+  # ============================================================================
+  # JOB 2: DEPLOY TO VERCEL PREVIEW (on PR)
+  # ============================================================================
+  deploy-preview:
+    name: Deploy Preview to Vercel
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel Preview
+        uses: vercel/action@main
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: frontend
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+
+  # ============================================================================
+  # JOB 3: DEPLOY TO VERCEL PRODUCTION (on main)
+  # ============================================================================
+  deploy-production:
+    name: Deploy to Vercel Production
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel Production
+        uses: vercel/action@main
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-args: --prod
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: frontend
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+
+      - name: Get deployment URL
+        id: deployment
+        run: |
+          echo "url=https://app.blackpot.restaurant" >> $GITHUB_OUTPUT
+
+  # ============================================================================
+  # JOB 4: E2E TESTS (Optional - runs against production)
+  # ============================================================================
+  e2e-tests:
+    name: Run E2E Tests
+    needs: deploy-production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Install Playwright
+        run: |
+          cd frontend
+          npx playwright install --with-deps
+
+      - name: Run E2E tests
+        run: |
+          cd frontend
+          npm run test:e2e
+        env:
+          API_URL: https://api.blackpot.restaurant
+          APP_URL: https://app.blackpot.restaurant
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: e2e-results
+          path: frontend/test-results
+
+  # ============================================================================
+  # JOB 5: PERFORMANCE CHECK
+  # ============================================================================
+  performance-check:
+    name: Check Performance Metrics
+    needs: deploy-production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v10
+        with:
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+          configPath: './frontend/lighthouserc.json'
+
+  # ============================================================================
+  # JOB 6: SECURITY SCAN
+  # ============================================================================
+  security-scan:
+    name: Security Scan
+    needs: build-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run npm audit
+        run: |
+          cd frontend
+          npm audit --audit-level=moderate || true
+
+      - name: Run Snyk scan
+        uses: snyk/actions/node@master
+        with:
+          args: --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+
+  # ============================================================================
+  # JOB 7: NOTIFICATIONS
+  # ============================================================================
+  notify:
+    name: Send Notifications
+    needs: [deploy-production, e2e-tests]
+    runs-on: ubuntu-latest
+    if: always() && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Determine status
+        id: status
+        run: |
+          if [ "${{ needs.deploy-production.result }}" = "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "emoji=✅" >> $GITHUB_OUTPUT
+            echo "message=Frontend deployed successfully to production!" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "emoji=❌" >> $GITHUB_OUTPUT
+            echo "message=Frontend deployment failed!" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ steps.status.outputs.status }}
+          text: |
+            ${{ steps.status.outputs.emoji }} Frontend Deployment
+            ${{ steps.status.outputs.message }}
+            
+            Repository: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+            Branch: ${{ github.ref }}
+            
+            URL: https://app.blackpot.restaurant
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+
