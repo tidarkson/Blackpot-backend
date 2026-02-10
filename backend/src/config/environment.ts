@@ -47,6 +47,23 @@ export const config = {
   EMAIL_FROM: process.env.EMAIL_FROM || 'noreply@blackpot.com',
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
   
+  // Redis Configuration
+  REDIS_HOST: process.env.REDIS_HOST || 'localhost',
+  REDIS_PORT: parseInt(process.env.REDIS_PORT || '6379'),
+  REDIS_PASSWORD: process.env.REDIS_PASSWORD,
+  REDIS_DB: parseInt(process.env.REDIS_DB || '0'),
+  REDIS_ENABLED: process.env.REDIS_ENABLED !== 'false', // Enabled by default
+  
+  // Sentry Configuration
+  SENTRY_DSN: process.env.SENTRY_DSN,
+  SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development',
+  SENTRY_TRACES_SAMPLE_RATE: parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE || '0.2'),
+  SENTRY_PROFILES_SAMPLE_RATE: parseFloat(process.env.SENTRY_PROFILES_SAMPLE_RATE || '0.1'),
+  SENTRY_DEBUG: process.env.SENTRY_DEBUG || 'false',
+  
+  // App Version for Sentry Release Tracking
+  APP_VERSION: process.env.APP_VERSION || '1.0.0',
+  
   // API
   API_VERSION: 'v1',
   API_PREFIX: '/api/v1',

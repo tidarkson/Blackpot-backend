@@ -5,6 +5,7 @@ import { SpecialRequestController } from '../controllers/SpecialRequestControlle
 import { OrderService } from '../services/OrderService';
 import { SpecialRequestService } from '../services/SpecialRequestService';
 import { PrismaClient } from '@prisma/client';
+import { orderCreationLimiter, orderRetrievalLimiter, orderUpdateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -23,152 +24,191 @@ const bindSpecialRequestController = (method: Function) => {
 };
 
 /**
- * CREATE ORDER
+ * ✅ ACCEPTANCE CRITERIA: Order Endpoints with Rate Limiting
+ * All order operations are protected with appropriate rate limits based on operation type
+ * Premium accounts have 3x higher limits
+ */
+
+/**
  * POST /api/orders
+ * Rate Limit: 100 per minute per account
+ * Rationale: Protect against order flooding and bulk creation abuse
+ * Premium: 300 per minute
+ * CREATE ORDER
  */
-router.post('/', authenticate, bindController(orderController.createOrder));
+router.post('/', authenticate, orderCreationLimiter, bindController(orderController.createOrder));
 
 /**
+ * GET /api/orders
+ * Rate Limit: 200 per minute per account
+ * Rationale: Read operations have higher limits than writes
+ * Premium: 600 per minute
  * LIST ORDERS
- * GET /api/orders?status=OPEN&page=1&pageSize=10
  */
-router.get('/', authenticate, bindController(orderController.listOrders));
+router.get('/', authenticate, orderRetrievalLimiter, bindController(orderController.listOrders));
 
 /**
- * GET ORDER BY ID
  * GET /api/orders/:orderId
+ * Rate Limit: 200 per minute per account (inherited from GET)
+ * GET ORDER BY ID
  */
-router.get('/:orderId', authenticate, bindController(orderController.getOrderById));
+router.get('/:orderId', authenticate, orderRetrievalLimiter, bindController(orderController.getOrderById));
 
 /**
- * GET ORDER DETAILS
  * GET /api/orders/:orderId/details
+ * Rate Limit: 200 per minute per account
+ * GET ORDER DETAILS
  */
-router.get('/:orderId/details', authenticate, bindController(orderController.getOrderDetails));
+router.get('/:orderId/details', authenticate, orderRetrievalLimiter, bindController(orderController.getOrderDetails));
 
 /**
- * UPDATE ORDER
  * PUT /api/orders/:orderId
+ * Rate Limit: 50 per minute per account
+ * Rationale: Update operations are lower than creation to prevent excessive modifications
+ * Premium: 150 per minute
+ * UPDATE ORDER
  */
-router.put('/:orderId', authenticate, bindController(orderController.updateOrder));
+router.put('/:orderId', authenticate, orderUpdateLimiter, bindController(orderController.updateOrder));
 
 /**
- * UPDATE ORDER STATUS
  * PATCH /api/orders/:orderId/status
+ * Rate Limit: 50 per minute per account
+ * UPDATE ORDER STATUS
  */
-router.patch('/:orderId/status', authenticate, bindController(orderController.updateOrderStatus));
+router.patch('/:orderId/status', authenticate, orderUpdateLimiter, bindController(orderController.updateOrderStatus));
 
 /**
- * CLOSE ORDER (Prepare for payment)
  * PATCH /api/orders/:orderId/close
+ * Rate Limit: 50 per minute per account
+ * CLOSE ORDER (Prepare for payment)
  */
-router.patch('/:orderId/close', authenticate, bindController(orderController.closeOrder));
+router.patch('/:orderId/close', authenticate, orderUpdateLimiter, bindController(orderController.closeOrder));
 
 /**
- * CANCEL ORDER
  * DELETE /api/orders/:orderId
+ * Rate Limit: 50 per minute per account
+ * CANCEL ORDER
  */
-router.delete('/:orderId', authenticate, bindController(orderController.cancelOrder));
+router.delete('/:orderId', authenticate, orderUpdateLimiter, bindController(orderController.cancelOrder));
 
 /**
- * ADD COURSE TO ORDER
  * POST /api/orders/:orderId/courses
+ * Rate Limit: 100 per minute per account (creation operation)
+ * ADD COURSE TO ORDER
  */
-router.post('/:orderId/courses', authenticate, bindController(orderController.addCourse));
+router.post('/:orderId/courses', authenticate, orderCreationLimiter, bindController(orderController.addCourse));
 
 /**
- * ADD ITEM TO ORDER
  * POST /api/orders/:orderId/items
+ * Rate Limit: 100 per minute per account
+ * ADD ITEM TO ORDER
  */
-router.post('/:orderId/items', authenticate, bindController(orderController.addItemToOrder));
+router.post('/:orderId/items', authenticate, orderCreationLimiter, bindController(orderController.addItemToOrder));
 
 /**
- * UPDATE ORDER ITEM
  * PUT /api/orders/:orderId/items/:itemId
+ * Rate Limit: 50 per minute per account
+ * UPDATE ORDER ITEM
  */
 router.put(
   '/:orderId/items/:itemId',
   authenticate,
+  orderUpdateLimiter,
   bindController(orderController.updateOrderItem)
 );
 
 /**
- * REMOVE ORDER ITEM
  * DELETE /api/orders/:orderId/items/:itemId
+ * Rate Limit: 50 per minute per account
+ * REMOVE ORDER ITEM
  */
 router.delete(
   '/:orderId/items/:itemId',
   authenticate,
+  orderUpdateLimiter,
   bindController(orderController.removeOrderItem)
 );
 
 /**
- * GET ORDERS BY TABLE
  * GET /api/tables/:tableId/orders
+ * Rate Limit: 200 per minute per account
+ * GET ORDERS BY TABLE
  */
-router.get('/table/:tableId', authenticate, bindController(orderController.getOrdersByTable));
+router.get('/table/:tableId', authenticate, orderRetrievalLimiter, bindController(orderController.getOrdersByTable));
 
 // ===============================
 // SPECIAL REQUESTS ROUTES
 // ===============================
 
 /**
- * CREATE SPECIAL REQUEST
  * POST /api/orders/:orderId/special-requests
+ * Rate Limit: 100 per minute per account
+ * CREATE SPECIAL REQUEST
  */
 router.post(
   '/:orderId/special-requests',
   authenticate,
+  orderCreationLimiter,
   bindSpecialRequestController(specialRequestController.createSpecialRequest)
 );
 
 /**
- * GET SPECIAL REQUESTS FOR ORDER
  * GET /api/orders/:orderId/special-requests
+ * Rate Limit: 200 per minute per account
+ * GET SPECIAL REQUESTS FOR ORDER
  */
 router.get(
   '/:orderId/special-requests',
   authenticate,
+  orderRetrievalLimiter,
   bindSpecialRequestController(specialRequestController.getSpecialRequests)
 );
 
 /**
- * GET SPECIAL REQUEST BY ID
  * GET /api/special-requests/:requestId
+ * Rate Limit: 200 per minute per account
+ * GET SPECIAL REQUEST BY ID
  */
 router.get(
   '/special-requests/:requestId',
   authenticate,
+  orderRetrievalLimiter,
   bindSpecialRequestController(specialRequestController.getSpecialRequest)
 );
 
 /**
- * UPDATE SPECIAL REQUEST
  * PUT /api/special-requests/:requestId
+ * Rate Limit: 50 per minute per account
+ * UPDATE SPECIAL REQUEST
  */
 router.put(
   '/special-requests/:requestId',
   authenticate,
+  orderUpdateLimiter,
   bindSpecialRequestController(specialRequestController.updateSpecialRequest)
 );
 
 /**
- * DELETE SPECIAL REQUEST
  * DELETE /api/special-requests/:requestId
+ * Rate Limit: 50 per minute per account
+ * DELETE SPECIAL REQUEST
  */
 router.delete(
   '/special-requests/:requestId',
   authenticate,
+  orderUpdateLimiter,
   bindSpecialRequestController(specialRequestController.deleteSpecialRequest)
 );
 
 /**
- * GET HIGH-PRIORITY SPECIAL REQUESTS
  * GET /api/special-requests/priority/HIGH
+ * Rate Limit: 200 per minute per account
+ * GET HIGH-PRIORITY SPECIAL REQUESTS
  */
 router.get(
   '/priority/HIGH',
   authenticate,
+  orderRetrievalLimiter,
   bindSpecialRequestController(specialRequestController.getHighPriorityRequests)
 );
 
