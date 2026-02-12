@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import { MenuService } from '../services/MenuService';
 import { MenuItemService } from '../services/MenuItemService';
+import cacheService, { CACHE_TTL } from '../services/CacheService';
+import cacheInvalidationService from '../services/cacheInvalidation.service';
+import CacheKeyGenerator, { CACHE_KEY_PATTERNS } from '../utils/cacheKeyGenerator';
+import logger from '../config/logger';
 import {
   menuCreateSchema,
   menuUpdateSchema,
@@ -17,6 +21,7 @@ export class MenuController {
   /**
    * Get all menus with pagination and search
    * GET /api/menus
+   * Cached: 1 hour TTL
    */
   static async getAllMenus(req: Request, res: Response) {
     try {
@@ -24,19 +29,46 @@ export class MenuController {
 
       // Validate query parameters
       const params = menuSearchSchema.parse(req.query);
+      const page = parseInt(params.page as unknown as string, 10);
 
+      // Generate cache key
+      const cacheKey = CACHE_KEY_PATTERNS.MENUS_LIST(tenantId, page);
+
+      // Try to get from cache
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        logger.debug(`✅ Menu list cache HIT for tenant ${tenantId}`);
+        return res
+          .set('X-Cache', 'HIT')
+          .set('Cache-Control', `public, max-age=${CACHE_TTL.MENU_ITEMS}`)
+          .json({
+            status: 'success',
+            data: cached,
+            _cache: 'HIT',
+          });
+      }
+
+      // Cache miss - fetch from database
       const result = await menuService.getAllMenus(tenantId, {
-        page: parseInt(params.page as unknown as string, 10),
+        page,
         pageSize: parseInt(params.pageSize as unknown as string, 10),
         search: params.search,
         isActive: params.isActive,
         sort: params.sort,
       });
 
-      return res.json({
-        status: 'success',
-        data: result,
-      });
+      // Cache the result
+      await cacheService.set(cacheKey, result, CACHE_TTL.MENU_ITEMS);
+      logger.debug(`💾 Cached menu list for tenant ${tenantId}`);
+
+      return res
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${CACHE_TTL.MENU_ITEMS}`)
+        .json({
+          status: 'success',
+          data: result,
+          _cache: 'MISS',
+        });
     } catch (error: any) {
       if (error.name === 'ZodError') {
         return res.status(422).json({
@@ -55,6 +87,7 @@ export class MenuController {
   /**
    * Get single menu by ID with sections and items
    * GET /api/menus/:id
+   * Cached: 1 hour TTL
    */
   static async getMenuById(req: Request, res: Response) {
     try {
@@ -69,6 +102,24 @@ export class MenuController {
         });
       }
 
+      // Generate cache key
+      const cacheKey = CACHE_KEY_PATTERNS.MENU_DETAIL(tenantId, id);
+
+      // Try to get from cache
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        logger.debug(`✅ Menu detail cache HIT for ${id}`);
+        return res
+          .set('X-Cache', 'HIT')
+          .set('Cache-Control', `public, max-age=${CACHE_TTL.MENU_ITEMS}`)
+          .json({
+            status: 'success',
+            data: cached,
+            _cache: 'HIT',
+          });
+      }
+
+      // Cache miss - fetch from database
       const menu = await menuService.getMenuById(id, tenantId);
 
       if (!menu) {
@@ -78,10 +129,18 @@ export class MenuController {
         });
       }
 
-      return res.json({
-        status: 'success',
-        data: menu,
-      });
+      // Cache the result
+      await cacheService.set(cacheKey, menu, CACHE_TTL.MENU_ITEMS);
+      logger.debug(`💾 Cached menu detail for ${id}`);
+
+      return res
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${CACHE_TTL.MENU_ITEMS}`)
+        .json({
+          status: 'success',
+          data: menu,
+          _cache: 'MISS',
+        });
     } catch (error: any) {
       return res.status(500).json({
         status: 'error',
@@ -93,6 +152,7 @@ export class MenuController {
   /**
    * Create new menu
    * POST /api/menus
+   * Invalidates: Menu list cache
    */
   static async createMenu(req: Request, res: Response) {
     try {
@@ -105,6 +165,9 @@ export class MenuController {
         name: data.name,
         isActive: data.isActive,
       });
+
+      // Invalidate menu caches
+      await cacheInvalidationService.invalidateMenuCache(tenantId);
 
       return res.status(201).json({
         status: 'success',
@@ -129,6 +192,7 @@ export class MenuController {
   /**
    * Update menu
    * PUT /api/menus/:id
+   * Invalidates: Specific menu cache and menu list cache
    */
   static async updateMenu(req: Request, res: Response) {
     try {
@@ -150,6 +214,9 @@ export class MenuController {
         name: data.name,
         isActive: data.isActive,
       });
+
+      // Invalidate menu caches
+      await cacheInvalidationService.invalidateMenuCache(tenantId, id);
 
       return res.json({
         status: 'success',
@@ -180,6 +247,7 @@ export class MenuController {
   /**
    * Delete menu
    * DELETE /api/menus/:id
+   * Invalidates: Specific menu cache and menu list cache
    */
   static async deleteMenu(req: Request, res: Response) {
     try {
@@ -195,6 +263,9 @@ export class MenuController {
       }
 
       const result = await menuService.deleteMenu(id, tenantId);
+
+      // Invalidate menu caches
+      await cacheInvalidationService.invalidateMenuCache(tenantId, id);
 
       return res.json({
         status: 'success',
@@ -223,6 +294,7 @@ export class MenuController {
   /**
    * Get menu sections
    * GET /api/menus/:id/sections
+   * Cached: 1 hour TTL
    */
   static async getMenuSections(req: Request, res: Response) {
     try {
@@ -240,6 +312,29 @@ export class MenuController {
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string, 10) : 25;
 
+      // Generate cache key with pagination
+      const cacheKey = CacheKeyGenerator.generateListKey('menu_sections', tenantId, {
+        menuId: id,
+        page,
+        pageSize,
+        search: req.query.search,
+      });
+
+      // Try to get from cache
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        logger.debug(`✅ Menu sections cache HIT for menu ${id}`);
+        return res
+          .set('X-Cache', 'HIT')
+          .set('Cache-Control', `public, max-age=${CACHE_TTL.MENU_ITEMS}`)
+          .json({
+            status: 'success',
+            data: cached,
+            _cache: 'HIT',
+          });
+      }
+
+      // Cache miss - fetch from database
       const result = await menuService.getMenuSections(id, tenantId, {
         page,
         pageSize,
@@ -247,10 +342,18 @@ export class MenuController {
         sort: (req.query.sort as 'name' | 'position') || 'position',
       });
 
-      return res.json({
-        status: 'success',
-        data: result,
-      });
+      // Cache the result
+      await cacheService.set(cacheKey, result, CACHE_TTL.MENU_ITEMS);
+      logger.debug(`💾 Cached menu sections for menu ${id}`);
+
+      return res
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${CACHE_TTL.MENU_ITEMS}`)
+        .json({
+          status: 'success',
+          data: result,
+          _cache: 'MISS',
+        });
     } catch (error: any) {
       if (error.message === 'Menu not found') {
         return res.status(404).json({

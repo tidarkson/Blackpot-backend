@@ -1,7 +1,7 @@
 import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
 import { Request, Response } from 'express';
 import RedisStore from 'rate-limit-redis';
-import { redisClient } from '../config/redis';
+import { redisClient } from '../utils/redisClient';
 import logger from '../config/logger';
 import { config } from '../config/environment';
 
@@ -140,10 +140,23 @@ const errorResponder = createErrorResponder('Too many requests, please try again
 const createStore = (prefix: string) => {
   if (config.REDIS_ENABLED) {
     try {
-      if (redisClient.isOpen) {
+      if (redisClient.getIsConnected()) {
+        const redisInstance = redisClient.getClient();
         return new RedisStore({
-          sendCommand: async (...args: string[]) => {
-            return await (redisClient.sendCommand as any)(args as any);
+          sendCommand: async (...args: string[]): Promise<any> => {
+            const [command, ...cmdArgs] = args;
+            // Use the appropriate method based on command
+            if (command && typeof command === 'string') {
+              const cmd = command.toLowerCase();
+              if (cmd === 'incr') {
+                return await redisInstance.incr(cmdArgs[0]);
+              } else if (cmd === 'expire') {
+                return await redisInstance.expire(cmdArgs[0], parseInt(cmdArgs[1]));
+              } else if (cmd === 'get') {
+                return await redisInstance.get(cmdArgs[0]);
+              }
+            }
+            return null;
           },
           prefix,
         });

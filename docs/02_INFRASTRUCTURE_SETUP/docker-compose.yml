@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: blackpot_postgres
+    environment:
+      POSTGRES_USER: blackpot_user
+      POSTGRES_PASSWORD: un1vers1ty
+      POSTGRES_DB: blackpot_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blackpot_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - blackpot_network
+
+  # Redis Cache Layer
+  redis:
+    image: redis:7-alpine
+    container_name: blackpot_redis
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Uncomment if using Redis authentication (production)
+    # environment:
+    #   REDIS_PASSWORD: your_redis_password
+    networks:
+      - blackpot_network
+
+  # Redis Commander - Web UI for Redis (optional, for development)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: blackpot_redis_commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - blackpot_network
+    profiles:
+      - dev-tools
+
+  # pgAdmin - PostgreSQL Web UI (optional, for development)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: blackpot_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@blackpot.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - blackpot_network
+    profiles:
+      - dev-tools
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  blackpot_network:
+    driver: bridge
+
+# Usage:
+# 
+# Start all services (postgres + redis):
+#   docker-compose up -d
+#
+# Start with optional dev tools (redis-commander, pgAdmin):
+#   docker-compose --profile dev-tools up -d
+#
+# Stop all services:
+#   docker-compose down
+#
+# View logs:
+#   docker-compose logs -f
+#
+# View specific service logs:
+#   docker-compose logs -f redis
+#   docker-compose logs -f postgres
+#
+# Access services:
+#   - PostgreSQL: localhost:5432 (user: blackpot_user, password: un1vers1ty)
+#   - Redis: localhost:6379
+#   - Redis Commander (with dev-tools): http://localhost:8081
+#   - pgAdmin (with dev-tools): http://localhost:5050

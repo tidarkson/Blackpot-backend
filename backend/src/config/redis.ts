@@ -1,59 +1,34 @@
-import { createClient, RedisClientOptions } from 'redis';
+import { redisClient } from '../utils/redisClient';
 import logger from './logger';
 import { config } from './environment';
 
-// Create Redis client
-export const redisClient = createClient({
-  socket: {
-    host: config.REDIS_HOST,
-    port: config.REDIS_PORT,
-  },
-  password: config.REDIS_PASSWORD || undefined,
-  database: config.REDIS_DB || 0,
-  retryStrategy: (retries: number): number | undefined => {
-    const delay = Math.min(retries * 50, 2000);
-    if (retries > 20) {
-      return undefined;
-    }
-    return delay;
-  },
-} as RedisClientOptions);
-
-// Handle connection events
-redisClient.on('connect', () => {
-  logger.info('✅ Redis client connected successfully');
-});
-
-redisClient.on('ready', () => {
-  logger.info('✅ Redis client is ready to use');
-});
-
-redisClient.on('error', (err: Error) => {
-  logger.error('❌ Redis client error:', err);
-});
-
-redisClient.on('reconnecting', () => {
-  logger.warn('🔄 Redis client reconnecting...');
-});
-
-redisClient.on('end', () => {
-  logger.warn('🔌 Redis client disconnected');
-});
-
 /**
  * Initialize Redis connection
+ * Called on application startup
  */
 export async function initializeRedis(): Promise<void> {
   try {
-    // Only connect if not already connected
-    if (!redisClient.isOpen) {
-      await redisClient.connect();
-      logger.info('🚀 Redis connection initialized');
+    if (!config.REDIS_ENABLED) {
+      logger.warn('⚠️  Redis is disabled in configuration. Using graceful degradation.');
+      return;
+    }
+
+    const isConnected = redisClient.getIsConnected();
+    if (!isConnected) {
+      logger.info('🚀 Initializing Redis connection...');
+      
+      // Test connection
+      const canPing = await redisClient.ping();
+      if (canPing) {
+        logger.info('✅ Redis connection initialized successfully');
+      } else {
+        logger.warn('⚠️  Failed to initialize Redis. Continuing with graceful degradation.');
+      }
     }
   } catch (error) {
-    logger.error('Failed to connect to Redis:', error);
-    // Graceful degradation - app can still work without Redis (in-memory fallback)
-    logger.warn('⚠️ Continuing without Redis. Rate limiting will use in-memory store.');
+    logger.error('Failed to initialize Redis:', error);
+    // Graceful degradation - app continues without Redis
+    logger.warn('⚠️  Continuing without Redis. Some features may not work optimally.');
   }
 }
 
@@ -62,11 +37,8 @@ export async function initializeRedis(): Promise<void> {
  */
 export async function checkRedisHealth(): Promise<boolean> {
   try {
-    if (!redisClient.isOpen) {
-      return false;
-    }
-    await redisClient.ping();
-    return true;
+    const health = await redisClient.healthCheck();
+    return health.healthy;
   } catch (error) {
     logger.error('Redis health check failed:', error);
     return false;
@@ -78,14 +50,31 @@ export async function checkRedisHealth(): Promise<boolean> {
  */
 export async function closeRedis(): Promise<void> {
   try {
-    if (redisClient.isOpen) {
-      await redisClient.quit();
-      logger.info('✅ Redis connection closed gracefully');
-    }
+    logger.info('Closing Redis connection...');
+    await redisClient.disconnect();
+    logger.info('✅ Redis connection closed');
   } catch (error) {
     logger.error('Error closing Redis connection:', error);
   }
 }
 
+/**
+ * Get Redis client status
+ */
+export function getRedisStatus(): string {
+  return redisClient.getStatus();
+}
+
+/**
+ * Check if Redis is connected
+ */
+export function isRedisConnected(): boolean {
+  return redisClient.getIsConnected();
+}
+
+// Export the Redis client instance for direct access if needed
+export { redisClient };
+
 export default redisClient;
+
 
