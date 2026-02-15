@@ -77,10 +77,27 @@ router.put('/password', authenticate, AuthController.changePassword);
 router.get('/reset-password/:token', AuthController.verifyResetToken);
 
 /**
- * GET /api/auth/tenants/:tenantId/users
- * Get all users for a specific tenant
- * Requires: Valid JWT token + Tenant access
+ * GET /api/auth/sessions
+ * Get all active sessions for current user
+ * Requires: Valid JWT token
+ * Response: Array of sessions with login time, IP, and device info
  */
-router.get('/tenants/:tenantId/users', authenticate, ensureTenantAccess, UserController.getUsersByTenant);
+router.get('/sessions', authenticate, AuthController.getActiveSessions);
+
+/**
+ * DELETE /api/auth/sessions/:sessionId
+ * Revoke a specific session (logout from specific device)
+ * Requires: Valid JWT token
+ * Params: sessionId - Session ID to revoke
+ */
+router.delete('/sessions/:sessionId', authenticate, AuthController.revokeSession);
+
+/**
+ * POST /api/auth/sessions/logout-all-other
+ * Logout all other sessions for current user
+ * Requires: Valid JWT token
+ * Use case: User found unauthorized login, wants to secure account
+ */
+router.post('/sessions/logout-all-other', authenticate, AuthController.logoutAllOtherSessions);
 
 export default router;

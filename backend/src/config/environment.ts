@@ -54,6 +54,15 @@ export const config = {
   REDIS_DB: parseInt(process.env.REDIS_DB || '0'),
   REDIS_ENABLED: process.env.REDIS_ENABLED !== 'false', // Enabled by default
   
+  // Session Configuration
+  SESSION_SECRET: process.env.SESSION_SECRET || process.env.JWT_SECRET,
+  SESSION_TIMEOUT_MS: parseInt(process.env.SESSION_TIMEOUT_MS || String(24 * 60 * 60 * 1000)), // 24 hours
+  REMEMBER_ME_TIMEOUT_MS: parseInt(process.env.REMEMBER_ME_TIMEOUT_MS || String(30 * 24 * 60 * 60 * 1000)), // 30 days
+  COOKIE_DOMAIN: process.env.COOKIE_DOMAIN,
+  SESSION_ENABLE_FINGERPRINTING: process.env.SESSION_ENABLE_FINGERPRINTING !== 'false',
+  SESSION_VALIDATE_IP: process.env.SESSION_VALIDATE_IP === 'true',
+  SESSION_MAX_CONCURRENT: parseInt(process.env.SESSION_MAX_CONCURRENT || '3'),
+  
   // Sentry Configuration
   SENTRY_DSN: process.env.SENTRY_DSN,
   SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development',

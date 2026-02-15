@@ -79,7 +79,7 @@ export class PasswordResetService {
   }
 
   // Reset password with token
-  async resetPassword(token: string, newPassword: string): Promise<void> {
+  async resetPassword(token: string, newPassword: string): Promise<{ userId: string }> {
     const hashedToken = crypto
       .createHash('sha256')
       .update(token)
@@ -113,5 +113,7 @@ export class PasswordResetService {
       where: { id: resetRecord.id },
       data: { usedAt: new Date() },
     });
+
+    return { userId: resetRecord.userId };
   }
 }

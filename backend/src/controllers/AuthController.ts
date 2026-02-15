@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
 import { PasswordResetService } from '../services/PasswordResetService';
 import { EmailService } from '../services/EmailService';
+import { sessionService } from '../services/SessionService';
 
 const passwordResetService = new PasswordResetService();
 const emailService = new EmailService();
@@ -10,7 +11,7 @@ const authService = new AuthService();
 export class AuthController {
   static async login(req: Request, res: Response) {
     try {
-      const { email, password } = req.body;
+      const { email, password, rememberMe } = req.body;
       const ipAddress = req.ip || req.socket.remoteAddress;
 
       // Validate required fields
@@ -24,6 +25,22 @@ export class AuthController {
       }
 
       const result = await authService.login(email, password, ipAddress);
+
+      // Create Redis-backed session
+      try {
+        await sessionService.createSession(
+          req,
+          result.user.id,
+          result.user.tenantId,
+          result.user.role,
+          result.user.email,
+          rememberMe || false
+        );
+      } catch (sessionError: any) {
+        console.error('Session creation failed:', sessionError);
+        // Don't fail login if session creation fails, but log it
+        // User still gets JWT tokens for fallback auth
+      }
 
       return res.status(200).json({
         status: 'success',
@@ -165,6 +182,14 @@ export class AuthController {
         // await blacklistService.blacklistToken(token, expiryDate);
       }
 
+      // Clear Redis session
+      try {
+        await sessionService.clearSession(req);
+      } catch (sessionError: any) {
+        console.error('Session clearing failed:', sessionError);
+        // Don't fail logout if session clearing fails
+      }
+
       // Clear any other session data if needed
       // This is primarily for frontend to clear localStorage
 
@@ -249,7 +274,14 @@ export class AuthController {
       const { resetPasswordSchema } = await import('../validators/auth.validator');
       resetPasswordSchema.parse({ token, newPassword, confirmPassword });
 
-      await passwordResetService.resetPassword(token, newPassword);
+      const resetResult = await passwordResetService.resetPassword(token, newPassword);
+
+      // Invalidate all sessions for this user (security best practice)
+      try {
+        await sessionService.invalidateAllUserSessions(resetResult.userId);
+      } catch (sessionError: any) {
+        console.error('Failed to invalidate sessions after password reset:', sessionError);
+      }
 
       // Send confirmation email
       // await emailService.sendPasswordChangedEmail(email, userName);
@@ -273,6 +305,103 @@ export class AuthController {
         status: 'error',
         code: 400,
         error: 'PASSWORD_RESET_FAILED',
+        message: error.message,
+      });
+    }
+  }
+
+  /**
+   * Get all active sessions for current user
+   */
+  static async getActiveSessions(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const sessions = await sessionService.getUserSessions(userId);
+
+      return res.status(200).json({
+        status: 'success',
+        code: 200,
+        data: {
+          activeSessions: sessions,
+          count: sessions.length,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: 'error',
+        code: 500,
+        error: 'FAILED_TO_GET_SESSIONS',
+        message: error.message,
+      });
+    }
+  }
+
+  /**
+   * Revoke a specific session (logout from specific device)
+   */
+  static async revokeSession(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const sessionId = Array.isArray(req.body.sessionId)
+        ? req.body.sessionId[0]
+        : req.body.sessionId;
+
+      if (!sessionId) {
+        return res.status(400).json({
+          status: 'error',
+          code: 400,
+          error: 'MISSING_SESSION_ID',
+          message: 'Session ID is required',
+        });
+      }
+
+      await sessionService.revokeSession(userId, sessionId);
+
+      return res.status(200).json({
+        status: 'success',
+        code: 200,
+        message: 'Session revoked successfully',
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: 'error',
+        code: 500,
+        error: 'FAILED_TO_REVOKE_SESSION',
+        message: error.message,
+      });
+    }
+  }
+
+  /**
+   * Logout all other sessions for current user
+   */
+  static async logoutAllOtherSessions(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const currentSessionId = (req as any).sessionID;
+
+      const sessions = await sessionService.getUserSessions(userId);
+
+      // Revoke all sessions except current
+      for (const session of sessions) {
+        if (session.sessionId !== currentSessionId) {
+          await sessionService.revokeSession(userId, session.sessionId);
+        }
+      }
+
+      return res.status(200).json({
+        status: 'success',
+        code: 200,
+        message: 'All other sessions have been logged out',
+        data: {
+          revokedCount: sessions.length - 1,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: 'error',
+        code: 500,
+        error: 'FAILED_TO_LOGOUT_OTHER_SESSIONS',
         message: error.message,
       });
     }

@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import session from 'express-session';
 import * as Sentry from '@sentry/node';
 import { config } from './config/environment';
 import logger from './config/logger';
@@ -11,6 +12,11 @@ import {
 } from './middleware/rateLimiter';
 import { initializeRedis, closeRedis, checkRedisHealth } from './config/redis';
 import { initSentry, captureMessage } from './config/sentry';
+import { initializeSessionConfig } from './config/session.config';
+import {
+  sessionValidator,
+  sessionLogger as sessionLoggerMiddleware,
+} from './middleware/session.middleware';
 import {
   sentryRequestMiddleware,
   sentryErrorMiddleware,
@@ -62,6 +68,13 @@ async function startServer() {
     // Body parsing
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
+
+    // ✅ Initialize Express Session with Redis store
+    // MUST be after body parsing and before route handlers
+    const sessionConfig = initializeSessionConfig();
+    app.use(session(sessionConfig));
+    app.use(sessionLoggerMiddleware);
+    app.use(sessionValidator);
 
     // Request logging
     app.use(requestLogger);
