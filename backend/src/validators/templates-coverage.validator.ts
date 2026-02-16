@@ -33,9 +33,33 @@ export const createShiftTemplateSchema = z.object({
 
 export type CreateShiftTemplateRequest = z.infer<typeof createShiftTemplateSchema>;
 
-export const updateShiftTemplateSchema = createShiftTemplateSchema
-  .omit({ dayOfWeek: true })
-  .partial();
+// Update schema - cannot use .omit() on refined schemas, so define separately
+export const updateShiftTemplateSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').optional(),
+  roleRequired: StaffRoleEnum.optional(),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:MM format').optional(),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, 'Must be HH:MM format').optional(),
+  breakMinutes: z.coerce.number().nonnegative().default(0).optional(),
+  notes: z.string().optional(),
+})
+  .superRefine((data, ctx) => {
+    // Only validate times if both are provided
+    if (data.startTime && data.endTime) {
+      const [startHour, startMin] = data.startTime.split(':').map(Number);
+      const [endHour, endMin] = data.endTime.split(':').map(Number);
+
+      const startMinutes = startHour * 60 + startMin;
+      const endMinutes = endHour * 60 + endMin;
+
+      if (endMinutes <= startMinutes) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'End time must be after start time',
+          path: ['endTime'],
+        });
+      }
+    }
+  });
 
 export type UpdateShiftTemplateRequest = z.infer<typeof updateShiftTemplateSchema>;
 
@@ -68,7 +92,33 @@ export const createCoverageRequirementSchema = z.object({
 
 export type CreateCoverageRequirementRequest = z.infer<typeof createCoverageRequirementSchema>;
 
-export const updateCoverageRequirementSchema = createCoverageRequirementSchema.partial();
+// Update schema - cannot use .partial() on refined schemas, so define separately
+export const updateCoverageRequirementSchema = z.object({
+  roleRequired: StaffRoleEnum.optional(),
+  minimumStaff: z.coerce.number().positive('Minimum staff must be positive').optional(),
+  dayOfWeek: z.number().int().min(0).max(6).optional(),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  notes: z.string().optional(),
+})
+  .superRefine((data, ctx) => {
+    // Only validate times if both are provided
+    if (data.startTime && data.endTime) {
+      const [startHour, startMin] = data.startTime.split(':').map(Number);
+      const [endHour, endMin] = data.endTime.split(':').map(Number);
+
+      const startMinutes = startHour * 60 + startMin;
+      const endMinutes = endHour * 60 + endMin;
+
+      if (endMinutes <= startMinutes) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'End time must be after start time',
+          path: ['endTime'],
+        });
+      }
+    }
+  });
 
 export type UpdateCoverageRequirementRequest = z.infer<typeof updateCoverageRequirementSchema>;
 

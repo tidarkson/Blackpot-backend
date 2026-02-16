@@ -6,28 +6,9 @@ import logger from '../config/logger';
 import { config } from '../config/environment';
 
 /**
- * Helper function to safely extract IPv6-compatible IP address
- */
-const getRequestIP = (req: Request): string => {
-  // Check for IP in order of preference
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  
-  // Check for X-Test-ID (for test isolation)
-  const testId = req.headers['x-test-id'] as string;
-  if (testId) {
-    return testId;
-  }
-  
-  return req.ip || req.socket.remoteAddress || 'unknown';
-};
-
-/**
  * Custom key generator that uses user ID if authenticated
- * When not authenticated, returns undefined to use express-rate-limit's
- * built-in IPv6-safe IP extraction
+ * Returns undefined for IP-based limiting to use express-rate-limit's
+ * built-in IPv6-safe IP extraction (ipKeyGenerator)
  */
 const keyGenerator = (req: Request): string | undefined => {
   // Extract user ID from JWT token or session
@@ -41,24 +22,14 @@ const keyGenerator = (req: Request): string | undefined => {
     return `rate-limit:${restaurantId}:user:${userId}`;
   }
   
-  // For unauthenticated requests with restaurant ID, use restaurant-based key
-  if (restaurantId) {
-    return `rate-limit:${restaurantId}:ip:${getRequestIP(req)}`;
-  }
-  
   // For test requests with X-Test-ID, use that for isolation
   const testId = req.headers['x-test-id'] as string;
   if (testId) {
     return `rate-limit:test:${testId}`;
   }
   
-  // Check for X-Forwarded-For to support proper IP-based rate limiting
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return `rate-limit:ip:${forwarded.split(',')[0].trim()}`;
-  }
-  
-  // Return undefined for default IP extraction from req.ip
+  // Return undefined to use express-rate-limit's built-in IP extraction
+  // which handles IPv6 properly
   return undefined;
 };
 

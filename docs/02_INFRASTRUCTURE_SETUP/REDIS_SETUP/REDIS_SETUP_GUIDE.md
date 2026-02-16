@@ -46,20 +46,21 @@ Redis has been successfully set up as a caching layer and session store for the 
 
 ```env
 # Redis Connection Settings
-REDIS_HOST=localhost              # Redis server hostname
-REDIS_PORT=6379                   # Redis server port
-REDIS_DB=0                        # Database number (0-15)
-REDIS_PASSWORD=                   # Password (optional)
-REDIS_ENABLED=true                # Enable/disable Redis
+REDIS_HOST=redis-19605.c341.af-south-1-1.ec2.cloud.redislabs.com  # Your Redis Cloud endpoint
+REDIS_PORT=19605                                                   # Custom port from Redis Cloud
+REDIS_DB=0                                                         # Database number (0-15)
+REDIS_PASSWORD=                                                    # Empty (Google OAuth account)
+REDIS_ENABLED=true                                                 # Enable/disable Redis
 
 # Environment-Specific Configurations:
-# Development: Local Redis via Docker
-# Staging/Production: Redis Cloud with authentication
+# Development: Redis Cloud (currently configured above)
+# Staging: Redis Cloud with authentication
+# Production: Redis Cloud with replication and backup
 ```
 
-### Docker Setup
+### Docker Setup (Alternative)
 
-Start Redis locally with PostgreSQL:
+≡⠀If you prefer local Docker instead of Redis Cloud:
 
 ```bash
 # Start both PostgreSQL and Redis
@@ -75,15 +76,38 @@ docker-compose logs -f redis
 docker-compose down
 ```
 
-### Redis Cloud (Production)
+### Redis Cloud (Development & Production)
 
-For production, use Redis Cloud:
+**Your Current Configuration (Development):**
+
+```bash
+# Connection details
+REDIS_HOST=redis-19605.c341.af-south-1-1.ec2.cloud.redislabs.com
+REDIS_PORT=19605
+REDIS_DB=0
+REDIS_PASSWORD=          # Empty (Google OAuth account)
+REDIS_ENABLED=true
+
+# Status: ✅ Configured in .env file
+# Region: Africa South (af-south-1-1)
+# No Docker required for Redis
+```
+
+**To use your Redis Cloud instance:**
+
+1. Your `.env` file is already configured with the Redis Cloud endpoint
+2. Ensure `REDIS_ENABLED=true` in your `.env`
+3. Start your application - it will connect directly to Redis Cloud
+4. Still need PostgreSQL via Docker: `docker-compose up postgres -d`
+
+**For production or additional databases:**
 
 ```bash
 # Get connection details from Redis Cloud Console
-REDIS_HOST=redis-instance.c123456.ng.0001.use1.cache.amazonaws.com
-REDIS_PORT=6379
-REDIS_PASSWORD=your_redis_cloud_password
+# https://console.redis.com/
+REDIS_HOST=your-custom-endpoint.c123456.ng.0001.use1.cache.amazonaws.com
+REDIS_PORT=your_custom_port
+REDIS_PASSWORD=your_redis_cloud_password  # If using password auth
 REDIS_DB=0
 ```
 

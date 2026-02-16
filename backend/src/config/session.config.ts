@@ -14,32 +14,43 @@ let sessionStore: any = null;
 
 /**
  * Get or create the Redis session store
+ * Falls back to memory store if Redis is not available
  */
 export function getSessionStore(): any {
   if (!sessionStore) {
-    if (!redisClient.getIsConnected()) {
-      throw new Error('Redis client is not connected. Cannot create session store.');
+    // Check if Redis is available
+    if (redisClient.getIsConnected()) {
+      try {
+        // Use the IORedis client from redisClient
+        const redisInstance = redisClient.getClient();
+
+        sessionStore = new RedisStore({
+          client: redisInstance as any,
+          prefix: 'session:', // Redis key prefix for sessions
+          serializer: {
+            stringify: (obj: any) => JSON.stringify(obj),
+            parse: (str: string) => {
+              try {
+                return JSON.parse(str);
+              } catch {
+                return {};
+              }
+            },
+          },
+        });
+
+        logger.info('✅ Redis session store initialized');
+        return sessionStore;
+      } catch (error) {
+        logger.warn(`⚠️  Failed to initialize Redis session store: ${error}. Falling back to memory store.`);
+      }
     }
 
-    // Use the IORedis client from redisClient
-    const redisInstance = redisClient.getClient();
-
-    sessionStore = new RedisStore({
-      client: redisInstance as any,
-      prefix: 'session:', // Redis key prefix for sessions
-      serializer: {
-        stringify: (obj: any) => JSON.stringify(obj),
-        parse: (str: string) => {
-          try {
-            return JSON.parse(str);
-          } catch {
-            return {};
-          }
-        },
-      },
-    });
-
-    logger.info('✅ Redis session store initialized');
+    // Fallback to memory-based session store when Redis is unavailable
+    // Note: This should only be used for development. In production, use Redis.
+    const memoryStore = require('express-session').MemoryStore;
+    sessionStore = new memoryStore();
+    logger.warn('⚠️  Using in-memory session store. This is suitable for development only. For production, ensure Redis is available.');
   }
 
   return sessionStore;

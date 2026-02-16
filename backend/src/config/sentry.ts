@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/node';
-import { nodeProfilingIntegration } from '@sentry/profiling-node';
+// Profiling disabled - optional for production only
+// import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { config } from './environment';
 
 /**
@@ -20,9 +21,9 @@ export const initSentry = () => {
     // Environment tracking
     environment: config.SENTRY_ENVIRONMENT || config.NODE_ENV,
 
-    // Enable profiling based on environment
+    // Enable profiling based on environment (disabled in dev)
     integrations: [
-      nodeProfilingIntegration(),
+      // nodeProfilingIntegration() - disabled for development
     ],
 
     // Trace sensitive data filtering

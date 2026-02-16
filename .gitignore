@@ -67,6 +67,9 @@ temp/
 .eslintcache
 .stylelintcache
 
+# Documentation
+docs/
+
 # Node version managers
 .nvmrc
 .node-version
