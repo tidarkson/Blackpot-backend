@@ -463,6 +463,23 @@ export const inventoryUpdateLimiter: RateLimitRequestHandler = rateLimit({
   store: createStore('rate-limit:inventory:update:'),
 });
 
+/**
+ * Dashboard retrieval rate limiter
+ * ✅ Acceptance Criteria: 200 per minute (same as read operations)
+ * Rationale: Dashboard is high-traffic but not database-write intensive
+ * Premium: 3x multiplier = 600 per minute
+ */
+export const dashboardRetrievalLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: (req: Request): number => isPremiumAccount(req) ? 600 : 200, // 200 requests per minute (3x for premium)
+  message: 'Dashboard rate limit exceeded. Please try again shortly.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: keyGenerator as any,
+  handler: createErrorResponder('Dashboard rate limit exceeded. Too many requests. Please wait before trying again.', 'dashboard'),
+  store: createStore('rate-limit:dashboard:'),
+});
+
 export default {
   apiLimiter,
   authLimiter,
@@ -480,6 +497,7 @@ export default {
   inventoryCreationLimiter,
   inventoryRetrievalLimiter,
   inventoryUpdateLimiter,
+  dashboardRetrievalLimiter,
   emailSendingLimiter,
   exportDataLimiter,
   searchLimiter,

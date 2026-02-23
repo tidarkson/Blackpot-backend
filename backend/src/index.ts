@@ -41,6 +41,8 @@ import inventoryRoutes from './routes/inventory';
 import staffRoutes from './routes/staff';
 import scheduleRoutes from './routes/schedules';
 import advancedSchedulingRoutes from './routes/advanced-scheduling';
+import dashboardRoutes from './routes/dashboard';
+import jobsRoutes from './routes/jobs';
 
 const app = express();
 
@@ -110,6 +112,7 @@ async function startServer() {
     // API Routes with Rate Limiting
     app.use(`${config.API_PREFIX}/auth`, authRoutes);
     app.use(`${config.API_PREFIX}/admin`, adminRoutes);
+    app.use(`${config.API_PREFIX}/dashboard`, dashboardRoutes);
     app.use(`${config.API_PREFIX}/orders`, orderRoutes);
     app.use(`${config.API_PREFIX}/reports`, reportRoutes);
     app.use(`${config.API_PREFIX}/inventory`, inventoryRoutes);
@@ -127,6 +130,7 @@ async function startServer() {
     app.use(`${config.API_PREFIX}/staff`, staffRoutes);
     app.use(`${config.API_PREFIX}/schedules`, scheduleRoutes);
     app.use(`${config.API_PREFIX}/advanced`, advancedSchedulingRoutes);
+    app.use(`${config.API_PREFIX}/jobs`, jobsRoutes);
 
     // 404 handler
     app.use((req: Request, res: Response) => {

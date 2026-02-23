@@ -7,7 +7,7 @@ import logger from '../config/logger';
 export const CACHE_TTL = {
   MENU_ITEMS: 3600, // 1 hour
   INVENTORY_LEVELS: 300, // 5 minutes
-  RECENT_ORDERS: 60, // 1 minute
+  RECENT_ORDERS: 30, // 30 seconds
   SESSION: 86400, // 24 hours
   RATE_LIMIT: 60, // 1 minute
   DASHBOARD: 60, // 1 minute

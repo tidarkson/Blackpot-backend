@@ -159,6 +159,11 @@ export class SessionService {
         JSON.stringify(sessionMetadata)
       );
 
+      // Extend TTL on the session tracking key (sliding window)
+      const shouldRemember = rememberMe !== undefined ? rememberMe : (req as any).session.rememberMe;
+      const sessionTimeout = getSessionTimeout(shouldRemember);
+      await redisClient.expire(sessionLimitKey, Math.floor(sessionTimeout / 1000));
+
       return true;
     } catch (error) {
       logger.error('Error validating session:', error);
@@ -234,6 +239,10 @@ export class SessionService {
 
       // Update session timeout
       (req as any).session.cookie.maxAge = sessionTimeout;
+
+      // Extend TTL in Redis for the session tracking key
+      const sessionLimitKey = `${this.USER_SESSIONS_PREFIX}${(req as any).session.user_id}`;
+      await redisClient.expire(sessionLimitKey, Math.floor(sessionTimeout / 1000));
 
       // Re-save to update expiration
       (req as any).session.save((err: any) => {

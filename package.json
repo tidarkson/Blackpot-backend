@@ -10,6 +10,8 @@
   "scripts": {
     "dev": "nodemon --exec ts-node backend/src/index.ts",
     "dev:no-watch": "ts-node backend/src/index.ts",
+    "workers": "ts-node workers.ts",
+    "workers:dev": "nodemon --exec ts-node workers.ts",
     "build": "tsc",
     "start": "node backend/dist/index.js",
     "db:migrate": "prisma migrate dev",
@@ -34,6 +36,8 @@
     "@sentry/profiling-node": "^10.38.0",
     "@types/bcrypt": "^6.0.0",
     "bcrypt": "^6.0.0",
+    "bull": "^4.14.2",
+    "bullmq": "^5.5.6",
     "cors": "^2.8.6",
     "date-fns": "^4.1.0",
     "decimal.js": "^10.6.0",

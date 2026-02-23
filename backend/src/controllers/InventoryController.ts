@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
 import InventoryService from '../services/InventoryService';
+import cacheService, { CACHE_TTL } from '../services/CacheService';
+import cacheInvalidationService from '../services/cacheInvalidation.service';
+import CacheKeyGenerator, { CACHE_KEY_PATTERNS } from '../utils/cacheKeyGenerator';
 import logger from '../config/logger';
 import { z } from 'zod';
 import {
@@ -18,21 +21,63 @@ export class InventoryController {
   /**
    * GET /api/inventory/items
    * Get all inventory items with optional filters
+   * Cached: 5 minute TTL
+   * Query params: cache=false to bypass cache, refresh=true to force refresh
    */
   async getInventoryItems(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.user?.tenantId as string;
 
+      // Check for cache bypass
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
       // Validate query parameters
       const validatedFilters = inventoryFiltersSchema.parse(req.query);
 
+      // Generate cache key
+      const cacheKey = CACHE_KEY_PATTERNS.INVENTORY_LIST(
+        tenantId,
+        1,
+        validatedFilters
+      );
+
+      // Try to get from cache
+      if (!bypassCache && !forceRefresh) {
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+          logger.debug(`✅ Inventory items cache HIT for tenant ${tenantId}`);
+          const cachedItems = cached as any[];
+          res.status(200)
+            .set('X-Cache', 'HIT')
+            .set('Cache-Control', `public, max-age=${CACHE_TTL.INVENTORY_LEVELS}`)
+            .json({
+              success: true,
+              data: cachedItems,
+              count: cachedItems.length,
+              _cache: 'HIT',
+            });
+          return;
+        }
+      }
+
+      // Cache miss - fetch from database
+      logger.debug(`❌ Inventory items cache MISS for tenant ${tenantId}`);
       const items = await InventoryService.getInventoryItems(tenantId, validatedFilters);
 
-      res.status(200).json({
-        success: true,
-        data: items,
-        count: items.length,
-      });
+      // Cache the result (5 minute TTL)
+      await cacheService.set(cacheKey, items, CACHE_TTL.INVENTORY_LEVELS);
+      logger.debug(`💾 Cached inventory items for tenant ${tenantId}`);
+
+      res.status(200)
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${CACHE_TTL.INVENTORY_LEVELS}`)
+        .json({
+          success: true,
+          data: items,
+          count: items.length,
+          _cache: 'MISS',
+        });
     } catch (error: any) {
       logger.error('Error in getInventoryItems:', error.message);
       res.status(error.message.includes('Invalid') ? 400 : 500).json({
@@ -45,6 +90,7 @@ export class InventoryController {
   /**
    * GET /api/inventory/items/:id
    * Get specific inventory item details
+   * Cached: 5 minute TTL
    */
   async getInventoryItemById(req: Request, res: Response): Promise<void> {
     try {
@@ -59,12 +105,52 @@ export class InventoryController {
         return;
       }
 
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
+      // Generate cache key
+      const cacheKey = CACHE_KEY_PATTERNS.INVENTORY_ITEM(tenantId, id);
+
+      // Try to get from cache
+      if (!bypassCache && !forceRefresh) {
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+          logger.debug(`✅ Inventory item cache HIT for ${id}`);
+          res.status(200)
+            .set('X-Cache', 'HIT')
+            .set('Cache-Control', `public, max-age=${CACHE_TTL.INVENTORY_LEVELS}`)
+            .json({
+              success: true,
+              data: cached,
+              _cache: 'HIT',
+            });
+          return;
+        }
+      }
+
+      // Cache miss - fetch from database
+      logger.debug(`❌ Inventory item cache MISS for ${id}`);
       const item = await InventoryService.getInventoryItemById(id as string, tenantId);
 
-      res.status(200).json({
-        success: true,
-        data: item,
-      });
+      if (!item) {
+        res.status(404).json({
+          success: false,
+          message: 'Inventory item not found',
+        });
+        return;
+      }
+
+      // Cache the result
+      await cacheService.set(cacheKey, item, CACHE_TTL.INVENTORY_LEVELS);
+
+      res.status(200)
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${CACHE_TTL.INVENTORY_LEVELS}`)
+        .json({
+          success: true,
+          data: item,
+          _cache: 'MISS',
+        });
     } catch (error: any) {
       logger.error('Error in getInventoryItemById:', error.message);
       res.status(error.message.includes('not found') ? 404 : 500).json({
@@ -77,6 +163,7 @@ export class InventoryController {
   /**
    * POST /api/inventory/items
    * Create new inventory item
+   * Invalidates: Inventory list and low-stock cache
    */
   async createInventoryItem(req: Request, res: Response): Promise<void> {
     try {
@@ -86,6 +173,9 @@ export class InventoryController {
       const validatedData = createInventoryItemSchema.parse(req.body);
 
       const item = await InventoryService.createInventoryItem(tenantId, validatedData);
+
+      // Invalidate inventory cache
+      await cacheInvalidationService.invalidateInventoryCache(tenantId);
 
       res.status(201).json({
         success: true,
@@ -105,6 +195,7 @@ export class InventoryController {
   /**
    * PUT /api/inventory/items/:id
    * Update inventory item
+   * Invalidates: Specific item cache, inventory list, and related caches
    */
   async updateInventoryItem(req: Request, res: Response): Promise<void> {
     try {
@@ -123,6 +214,9 @@ export class InventoryController {
       const validatedData = updateInventoryItemSchema.parse(req.body);
 
       const item = await InventoryService.updateInventoryItem(id as string, tenantId, validatedData);
+
+      // Invalidate inventory cache
+      await cacheInvalidationService.invalidateInventoryCache(tenantId, id);
 
       res.status(200).json({
         success: true,
@@ -143,6 +237,7 @@ export class InventoryController {
   /**
    * DELETE /api/inventory/items/:id
    * Delete inventory item
+   * Invalidates: Inventory cache entirely for safety
    */
   async deleteInventoryItem(req: Request, res: Response): Promise<void> {
     try {
@@ -158,6 +253,9 @@ export class InventoryController {
       }
 
       const result = await InventoryService.deleteInventoryItem(id as string, tenantId);
+
+      // Invalidate inventory cache
+      await cacheInvalidationService.invalidateInventoryCache(tenantId);
 
       res.status(200).json({
         success: true,
@@ -180,6 +278,7 @@ export class InventoryController {
   /**
    * POST /api/inventory/items/:id/adjust
    * Adjust stock quantity (add/remove)
+   * Invalidates: Inventory cache, low-stock alerts, and dashboard
    */
   async adjustStock(req: Request, res: Response): Promise<void> {
     try {
@@ -202,6 +301,9 @@ export class InventoryController {
         ...validatedData,
         performedBy: userId,
       });
+
+      // Invalidate related caches
+      await cacheInvalidationService.invalidateInventoryCache(tenantId, id);
 
       res.status(200).json({
         success: true,
@@ -269,19 +371,55 @@ export class InventoryController {
   /**
    * GET /api/inventory/low-stock
    * Get all items below minimum stock threshold
+   * Cached: 5 minute TTL
    */
   async getLowStockItems(req: Request, res: Response): Promise<void> {
     try {
       const tenantId = req.user?.tenantId as string;
 
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
+      // Generate cache key
+      const cacheKey = CACHE_KEY_PATTERNS.INVENTORY_LOW_STOCK(tenantId);
+
+      // Try to get from cache
+      if (!bypassCache && !forceRefresh) {
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+          logger.debug(`✅ Low stock items cache HIT for tenant ${tenantId}`);
+          const cachedItems = cached as any[];
+          res.status(200)
+            .set('X-Cache', 'HIT')
+            .set('Cache-Control', `public, max-age=${CACHE_TTL.INVENTORY_LEVELS}`)
+            .json({
+              success: true,
+              data: cachedItems,
+              count: cachedItems.length,
+              message: `${cachedItems.length} items are below minimum stock threshold`,
+              _cache: 'HIT',
+            });
+          return;
+        }
+      }
+
+      // Cache miss - fetch from database
+      logger.debug(`❌ Low stock items cache MISS for tenant ${tenantId}`);
       const lowStockItems = await InventoryService.getLowStockItems(tenantId);
 
-      res.status(200).json({
-        success: true,
-        data: lowStockItems,
-        count: lowStockItems.length,
-        message: `${lowStockItems.length} items are below minimum stock threshold`,
-      });
+      // Cache the result
+      await cacheService.set(cacheKey, lowStockItems, CACHE_TTL.INVENTORY_LEVELS);
+
+      res.status(200)
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${CACHE_TTL.INVENTORY_LEVELS}`)
+        .json({
+          success: true,
+          data: lowStockItems,
+          count: lowStockItems.length,
+          message: `${lowStockItems.length} items are below minimum stock threshold`,
+          _cache: 'MISS',
+        });
     } catch (error: any) {
       logger.error('Error in getLowStockItems:', error.message);
       res.status(500).json({

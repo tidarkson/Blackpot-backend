@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import { ReportService } from '../services/ReportService';
+import cacheService, { CACHE_TTL } from '../services/CacheService';
+import cacheInvalidationService from '../services/cacheInvalidation.service';
+import CacheKeyGenerator, { CACHE_KEY_PATTERNS } from '../utils/cacheKeyGenerator';
+import logger from '../config/logger';
 
 /**
  * ReportController
@@ -23,6 +27,7 @@ export class ReportController {
    * 
    * Generate daily sales report
    * Includes revenue by payment method, trends, and top items
+   * Cached: Until midnight (next day) - invalidated when new order placed
    * 
    * @body startDate - Report period start
    * @body endDate - Report period end
@@ -40,11 +45,53 @@ export class ReportController {
         return;
       }
 
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
+      // Calculate TTL until midnight
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      const ttlSeconds = Math.floor((tomorrow.getTime() - now.getTime()) / 1000);
+
+      // Generate cache key with date
+      const reportDate = new Date(startDate).toISOString().split('T')[0];
+      const cacheKey = CACHE_KEY_PATTERNS.REPORT_SALES(tenantId, reportDate);
+
+      // Try to get from cache
+      if (!bypassCache && !forceRefresh) {
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+          logger.debug(`✅ Sales report cache HIT for ${reportDate}`);
+          res
+            .set('X-Cache', 'HIT')
+            .set('Cache-Control', `public, max-age=${ttlSeconds}`)
+            .json({
+              ...cached,
+              _cache: 'HIT',
+            });
+          return;
+        }
+      }
+
+      // Cache miss - generate report
+      logger.debug(`❌ Sales report cache MISS for ${reportDate}`);
       const report = await this.reportService.generateDailySalesReport(
         tenantId,
         new Date(startDate)
       );
-      res.json(report);
+
+      // Cache until midnight
+      await cacheService.set(cacheKey, report, ttlSeconds);
+
+      res
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${ttlSeconds}`)
+        .json({
+          ...report,
+          _cache: 'MISS',
+        });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
@@ -55,6 +102,7 @@ export class ReportController {
    * 
    * Generate kitchen performance report
    * Includes order times, course completion rates, bottlenecks
+   * Cached: 1 hour TTL
    * 
    * @body startDate - Report period start
    * @body endDate - Report period end
@@ -72,11 +120,45 @@ export class ReportController {
         return;
       }
 
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
+      const reportDate = new Date(startDate).toISOString().split('T')[0];
+      const cacheKey = `report:kitchen:${tenantId}:${reportDate}`;
+
+      // Try to get from cache
+      if (!bypassCache && !forceRefresh) {
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+          logger.debug(`✅ Kitchen report cache HIT for ${reportDate}`);
+          res
+            .set('X-Cache', 'HIT')
+            .set('Cache-Control', `public, max-age=${CACHE_TTL.REPORTS}`)
+            .json({
+              ...cached,
+              _cache: 'HIT',
+            });
+          return;
+        }
+      }
+
+      // Cache miss - generate report
+      logger.debug(`❌ Kitchen report cache MISS for ${reportDate}`);
       const report = await this.reportService.generateKitchenPerformanceReport(
         tenantId,
         new Date(startDate)
       );
-      res.json(report);
+
+      // Cache for 1 hour
+      await cacheService.set(cacheKey, report, CACHE_TTL.REPORTS);
+
+      res
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${CACHE_TTL.REPORTS}`)
+        .json({
+          ...report,
+          _cache: 'MISS',
+        });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }
@@ -147,6 +229,7 @@ export class ReportController {
    * 
    * Generate comprehensive financial report
    * Includes revenue, expenses, profit margins, cash flow
+   * Cached: Until midnight (next day)
    * 
    * @body startDate - Report period start
    * @body endDate - Report period end
@@ -164,11 +247,52 @@ export class ReportController {
         return;
       }
 
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
+      // Calculate TTL until midnight
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      const ttlSeconds = Math.floor((tomorrow.getTime() - now.getTime()) / 1000);
+
+      const reportDate = new Date(startDate).toISOString().split('T')[0];
+      const cacheKey = CACHE_KEY_PATTERNS.REPORT_FINANCIAL(tenantId, reportDate);
+
+      // Try to get from cache
+      if (!bypassCache && !forceRefresh) {
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+          logger.debug(`✅ Financial report cache HIT for ${reportDate}`);
+          res
+            .set('X-Cache', 'HIT')
+            .set('Cache-Control', `public, max-age=${ttlSeconds}`)
+            .json({
+              ...cached,
+              _cache: 'HIT',
+            });
+          return;
+        }
+      }
+
+      // Cache miss - generate report
+      logger.debug(`❌ Financial report cache MISS for ${reportDate}`);
       const report = await this.reportService.generateFinancialReport(
         tenantId,
         new Date(startDate)
       );
-      res.json(report);
+
+      // Cache until midnight
+      await cacheService.set(cacheKey, report, ttlSeconds);
+
+      res
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${ttlSeconds}`)
+        .json({
+          ...report,
+          _cache: 'MISS',
+        });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
     }

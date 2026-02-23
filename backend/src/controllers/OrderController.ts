@@ -1,5 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { OrderService } from '../services/OrderService';
+import cacheService, { CACHE_TTL } from '../services/CacheService';
+import cacheInvalidationService from '../services/cacheInvalidation.service';
+import CacheKeyGenerator, { CACHE_KEY_PATTERNS } from '../utils/cacheKeyGenerator';
 import { AuthRequest } from '../types/auth';
 import { ZodError } from 'zod';
 import {
@@ -19,6 +22,7 @@ export class OrderController {
   /**
    * Create a new order
    * POST /api/orders
+   * Invalidates: Order list, dashboard caches
    */
   async createOrder(req: AuthRequest, res: Response, next: NextFunction) {
     try {
@@ -36,6 +40,9 @@ export class OrderController {
         userId
       );
 
+      // Invalidate order caches
+      await cacheInvalidationService.invalidateOrderCache(tenantId);
+
       logger.info('Order created', { orderId: order.id, tenantId });
       res.status(201).json({
         success: true,
@@ -49,14 +56,45 @@ export class OrderController {
   /**
    * List all orders with optional filters
    * GET /api/orders?status=OPEN&tableId=xxx&page=1
+   * Cached: 30 second TTL
    */
   async listOrders(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const tenantId = req.tenantId!;
       const queryParams = listOrdersSchema.parse(req.query);
 
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
       const { status, tableId, serverId, page, pageSize, startDate, endDate } = queryParams;
 
+      // Generate cache key
+      const cacheKey = CACHE_KEY_PATTERNS.ORDERS_LIST(tenantId, page || 1, {
+        status,
+        tableId,
+        serverId,
+      });
+
+      // Try to get from cache
+      if (!bypassCache && !forceRefresh) {
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+          logger.debug(`✅ Orders list cache HIT for tenant ${tenantId}`);
+          const cachedData = cached as any;
+          return res
+            .set('X-Cache', 'HIT')
+            .set('Cache-Control', `public, max-age=${CACHE_TTL.RECENT_ORDERS}`)
+            .json({
+              success: true,
+              data: cachedData.data,
+              pagination: cachedData.pagination,
+              _cache: 'HIT',
+            });
+        }
+      }
+
+      // Cache miss - fetch from database
+      logger.debug(`❌ Orders list cache MISS for tenant ${tenantId}`);
       const orders = await this.orderService.listOrders(tenantId, {
         status: status as any,
         tableId,
@@ -67,9 +105,7 @@ export class OrderController {
         endDate,
       });
 
-      logger.info('Orders listed', { tenantId, count: orders.data.length });
-      res.json({
-        success: true,
+      const response = {
         data: orders.data,
         pagination: {
           page,
@@ -77,7 +113,21 @@ export class OrderController {
           total: orders.total,
           totalPages: Math.ceil(orders.total / pageSize),
         },
-      });
+      };
+
+      // Cache the result (30 second TTL)
+      await cacheService.set(cacheKey, response, CACHE_TTL.RECENT_ORDERS);
+
+      logger.info('Orders listed', { tenantId, count: orders.data.length });
+      return res
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${CACHE_TTL.RECENT_ORDERS}`)
+        .json({
+          success: true,
+          data: orders.data,
+          pagination: response.pagination,
+          _cache: 'MISS',
+        });
     } catch (error) {
       next(error);
     }
@@ -86,12 +136,37 @@ export class OrderController {
   /**
    * Get order by ID with full details
    * GET /api/orders/:orderId
+   * Cached: 30 second TTL
    */
   async getOrderById(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const tenantId = req.tenantId!;
       const { orderId } = req.params;
 
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
+      // Generate cache key
+      const cacheKey = CACHE_KEY_PATTERNS.ORDER_DETAIL(tenantId, orderId);
+
+      // Try to get from cache
+      if (!bypassCache && !forceRefresh) {
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+          logger.debug(`✅ Order detail cache HIT for ${orderId}`);
+          return res
+            .set('X-Cache', 'HIT')
+            .set('Cache-Control', `public, max-age=${CACHE_TTL.RECENT_ORDERS}`)
+            .json({
+              success: true,
+              data: cached,
+              _cache: 'HIT',
+            });
+        }
+      }
+
+      // Cache miss - fetch from database
+      logger.debug(`❌ Order detail cache MISS for ${orderId}`);
       const order = await this.orderService.getOrderById(orderId, tenantId);
 
       if (!order) {
@@ -101,11 +176,18 @@ export class OrderController {
         });
       }
 
+      // Cache the result
+      await cacheService.set(cacheKey, order, CACHE_TTL.RECENT_ORDERS);
+
       logger.info('Order retrieved', { orderId, tenantId });
-      res.json({
-        success: true,
-        data: order,
-      });
+      return res
+        .set('X-Cache', 'MISS')
+        .set('Cache-Control', `public, max-age=${CACHE_TTL.RECENT_ORDERS}`)
+        .json({
+          success: true,
+          data: order,
+          _cache: 'MISS',
+        });
     } catch (error) {
       next(error);
     }
@@ -142,6 +224,7 @@ export class OrderController {
   /**
    * Update order details
    * PUT /api/orders/:orderId
+   * Invalidates: Order cache and order list cache
    */
   async updateOrder(req: AuthRequest, res: Response, next: NextFunction) {
     try {
@@ -159,6 +242,9 @@ export class OrderController {
         });
       }
 
+      // Invalidate order caches
+      await cacheInvalidationService.invalidateOrderCache(tenantId, orderId);
+
       logger.info('Order updated', { orderId, tenantId });
       res.json({
         success: true,
@@ -172,6 +258,7 @@ export class OrderController {
   /**
    * Update order status
    * PATCH /api/orders/:orderId/status
+   * Invalidates: Order cache, order list, and dashboard caches
    */
   async updateOrderStatus(req: AuthRequest, res: Response, next: NextFunction) {
     try {
@@ -189,6 +276,9 @@ export class OrderController {
           error: 'Order not found',
         });
       }
+
+      // Invalidate order caches
+      await cacheInvalidationService.invalidateOrderCache(tenantId, orderId);
 
       logger.info('Order status updated', { orderId, status, tenantId });
       res.json({
