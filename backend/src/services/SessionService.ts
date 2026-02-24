@@ -50,6 +50,11 @@ export class SessionService {
       const currentTime = Date.now();
 
       // Set session data in Express session
+      // Check if req.session exists (may be undefined if session middleware isn't initialized)
+      if (!req.session) {
+        throw new Error('Session middleware not initialized. Cannot create session.');
+      }
+
       (req as any).session.user_id = userId;
       (req as any).session.restaurant_id = restaurantId;
       (req as any).session.role = role;
@@ -123,6 +128,12 @@ export class SessionService {
    */
   async validateSession(req: Request, rememberMe?: boolean): Promise<boolean> {
     try {
+      // Check if session middleware is initialized
+      if (!req.session) {
+        logger.warn('Session middleware not initialized. Cannot validate session.');
+        return false;
+      }
+
       if (!(req as any).session?.user_id) {
         return false;
       }
@@ -177,6 +188,12 @@ export class SessionService {
    */
   async clearSession(req: Request): Promise<void> {
     try {
+      // Check if session exists before accessing it
+      if (!req.session) {
+        logger.warn('Session middleware not initialized. Cannot clear session.');
+        return;
+      }
+
       const userId = (req as any).session.user_id;
 
       if (userId) {
@@ -230,6 +247,12 @@ export class SessionService {
    */
   async extendSession(req: Request, rememberMe?: boolean): Promise<void> {
     try {
+      // Check if session middleware is initialized
+      if (!req.session) {
+        logger.warn('Session middleware not initialized. Cannot extend session.');
+        return;
+      }
+
       if (!(req as any).session?.user_id) {
         return;
       }
