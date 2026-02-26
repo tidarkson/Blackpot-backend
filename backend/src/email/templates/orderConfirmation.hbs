@@ -1,0 +1,88 @@
+<h2 style="color: #27ae60;">Order Confirmed! 🎉</h2>
+
+<p>Hi {{customerName}},</p>
+
+<p>Thank you for your order! Your order has been successfully confirmed and is being prepared.</p>
+
+<div class="success-box">
+  <strong>Order #{{orderId}}</strong>
+  <p style="margin: 8px 0 0 0;">Placed on {{orderDate}}</p>
+</div>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Order Details</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Item</th>
+      <th>Qty</th>
+      <th>Price</th>
+      <th>Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each items}}
+    <tr>
+      <td>{{this.name}}</td>
+      <td>{{this.quantity}}</td>
+      <td>${{this.price}}</td>
+      <td>${{this.total}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+
+<div class="info-box">
+  <strong>Order Summary</strong>
+  <table style="margin-top: 8px;">
+    <tr>
+      <td>Subtotal:</td>
+      <td style="text-align: right;">${{subtotal}}</td>
+    </tr>
+    {{#if tax}}
+    <tr>
+      <td>Tax:</td>
+      <td style="text-align: right;">${{tax}}</td>
+    </tr>
+    {{/if}}
+    {{#if discount}}
+    <tr>
+      <td>Discount:</td>
+      <td style="text-align: right; color: #27ae60;">-${{discount}}</td>
+    </tr>
+    {{/if}}
+    <tr style="border-top: 2px solid #ddd;">
+      <td><strong>Total</strong></td>
+      <td style="text-align: right;"><strong>${{total}}</strong></td>
+    </tr>
+  </table>
+</div>
+
+{{#if estimatedTime}}
+<div class="alert-box">
+  <strong>Estimated Preparation Time</strong>
+  <p style="margin: 8px 0 0 0;">Your order will be ready in approximately {{estimatedTime}} minutes.</p>
+</div>
+{{/if}}
+
+{{#if specialRequests}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Special Requests</h3>
+<p>{{specialRequests}}</p>
+{{/if}}
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">What's Next?</h3>
+<ul style="margin-left: 20px;">
+  <li>Our kitchen team is preparing your order</li>
+  <li>You'll receive a notification when it's ready</li>
+  <li>Payment will be due when collecting your order</li>
+</ul>
+
+<p style="margin-top: 20px;">If you need to make any changes to your order, please contact us as soon as possible.</p>
+
+<p>Questions? Contact us at <a href="tel:{{restaurantPhone}}">{{restaurantPhone}}</a> or visit our website.</p>
+
+<p style="margin-top: 20px;">Thank you for choosing {{restaurantName}}!</p>
+
+<p style="color: #7f8c8d; font-size: 12px; margin-top: 20px;">
+  Order Reference: {{orderId}} | Placed: {{orderDate}}
+</p>

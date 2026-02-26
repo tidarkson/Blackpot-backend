@@ -1,0 +1,158 @@
+<h2 style="color: #3498db;">📊 Daily Sales Report</h2>
+
+<p>Hi {{managerName}},</p>
+
+<p>Here's your daily sales report for {{restaurantName}} on {{reportDate}}.</p>
+
+<div class="info-box">
+  <strong>Daily Summary</strong>
+  <table style="margin: 8px 0 0 0;">
+    <tr>
+      <td>Total Orders:</td>
+      <td style="text-align: right;"><strong>{{totalOrders}}</strong></td>
+    </tr>
+    <tr>
+      <td>Total Revenue:</td>
+      <td style="text-align: right;"><strong style="color: #27ae60;">${{totalRevenue}}</strong></td>
+    </tr>
+    <tr>
+      <td>Average Order Value:</td>
+      <td style="text-align: right;">${{averageOrderValue}}</td>
+    </tr>
+    <tr>
+      <td>Total Customers:</td>
+      <td style="text-align: right;">{{totalCustomers}}</td>
+    </tr>
+  </table>
+</div>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Revenue Breakdown</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Payment Method</th>
+      <th style="text-align: right;">Count</th>
+      <th style="text-align: right;">Amount</th>
+      <th style="text-align: right;">Percentage</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each paymentMethods}}
+    <tr>
+      <td>{{this.method}}</td>
+      <td style="text-align: right;">{{this.count}}</td>
+      <td style="text-align: right;">${{this.amount}}</td>
+      <td style="text-align: right;">{{this.percentage}}%</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Top Selling Items</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Item</th>
+      <th style="text-align: right;">Qty Sold</th>
+      <th style="text-align: right;">Revenue</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each topItems}}
+    <tr>
+      <td>{{this.name}}</td>
+      <td style="text-align: right;">{{this.quantity}}</td>
+      <td style="text-align: right;">${{this.revenue}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+
+{{#if staffPerformance}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Staff Performance</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Server Name</th>
+      <th style="text-align: right;">Orders</th>
+      <th style="text-align: right;">Revenue</th>
+      <th style="text-align: right;">Avg Order</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each staffPerformance}}
+    <tr>
+      <td>{{this.name}}</td>
+      <td style="text-align: right;">{{this.orderCount}}</td>
+      <td style="text-align: right;">${{this.totalRevenue}}</td>
+      <td style="text-align: right;">${{this.averageOrderValue}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+{{/if}}
+
+{{#if busyHours}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Peak Hours</h3>
+
+<p>Busiest times today: {{busyHours}}</p>
+{{/if}}
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Operational Metrics</h3>
+
+<div class="info-box">
+  <table style="margin: 0;">
+    <tr>
+      <td>Average Wait Time:</td>
+      <td style="text-align: right;">{{averageWaitTime}}</td>
+    </tr>
+    <tr>
+      <td>Table Turnover Time:</td>
+      <td style="text-align: right;">{{tableAverageTime}}</td>
+    </tr>
+    {{#if wastePercentage}}
+    <tr>
+      <td>Waste/Cancellations:</td>
+      <td style="text-align: right;">{{wastePercentage}}%</td>
+    </tr>
+    {{/if}}
+    {{#if customerSatisfaction}}
+    <tr>
+      <td>Customer Satisfaction:</td>
+      <td style="text-align: right;">{{customerSatisfaction}}/5 ⭐</td>
+    </tr>
+    {{/if}}
+  </table>
+</div>
+
+{{#if notes}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Notes</h3>
+<p>{{notes}}</p>
+{{/if}}
+
+<p style="margin-top: 20px;">
+  <a href="{{{dashboardLink}}}" class="button">View Full Dashboard</a>
+  <a href="{{{reportLink}}}" class="button button-secondary">Detailed Report</a>
+</p>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Comparison with Yesterday</h3>
+
+<div class="success-box" {{#if previousDayCompare.isNegative}}style="background-color: #ffebee; border-color: #e74c3c;" {{/if}}>
+  <table style="margin: 0;">
+    <tr>
+      <td>Revenue Change:</td>
+      <td style="text-align: right; font-weight: bold;">{{#if previousDayCompare.isPositive}}↑{{/if}}{{previousDayCompare.revenueChange}}%</td>
+    </tr>
+    <tr>
+      <td>Orders Change:</td>
+      <td style="text-align: right;">{{#if previousDayCompare.isPositive}}↑{{/if}}{{previousDayCompare.orderChange}}%</td>
+    </tr>
+  </table>
+</div>
+
+<p style="color: #7f8c8d; font-size: 12px; margin-top: 20px;">
+  Report for: {{reportDate}} | Generated: {{generatedAt}}
+</p>

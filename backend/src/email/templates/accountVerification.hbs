@@ -1,0 +1,78 @@
+<h2 style="color: #27ae60;">Verify Your Email Address</h2>
+
+<p>Hi {{userName}},</p>
+
+<p>Welcome to BlackPot! To complete your account setup, please verify your email address by clicking the link below.</p>
+
+<div class="info-box">
+  <p style="margin: 0;">This will activate your account and allow you to access all features of the BlackPot platform.</p>
+</div>
+
+<p style="margin-top: 24px; text-align: center;">
+  <a href="{{{verificationLink}}}" class="button" style="display: inline-block;">Verify Email Address</a>
+</p>
+
+<p style="text-align: center; color: #7f8c8d; font-size: 13px;">Or copy this code and enter it in your account:</p>
+<p style="text-align: center; background-color: #f5f5f5; padding: 12px; border-radius: 4px; font-size: 14px; font-weight: bold; letter-spacing: 2px;">
+  {{verificationCode}}
+</p>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Your Account Details</h3>
+
+<div class="info-box">
+  <table style="margin: 0;">
+    <tr>
+      <td>Email:</td>
+      <td style="text-align: right;"><strong>{{email}}</strong></td>
+    </tr>
+    <tr>
+      <td>Account Type:</td>
+      <td style="text-align: right;">{{accountType}}</td>
+    </tr>
+    {{#if restaurantName}}
+    <tr>
+      <td>Restaurant:</td>
+      <td style="text-align: right;">{{restaurantName}}</td>
+    </tr>
+    {{/if}}
+    <tr>
+      <td>Verification Expires:</td>
+      <td style="text-align: right;">{{expiryTime}}</td>
+    </tr>
+  </table>
+</div>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Why Verify?</h3>
+
+<ul style="margin-left: 20px;">
+  <li>Secure your account with a verified email</li>
+  <li>Receive important account notifications</li>
+  <li>Enable password recovery options</li>
+  <li>Unlock all platform features</li>
+</ul>
+
+{{#if didNotSignUp}}
+<div class="alert-box">
+  <strong>Didn't Sign Up?</strong>
+  <p style="margin: 8px 0 0 0;">If you didn't create a BlackPot account, please <a href="mailto:support@blackpot.com">contact us</a> or ignore this email. Your email address will not be used.</p>
+</div>
+{{/if}}
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Getting Started</h3>
+
+<p>After verifying your email, you'll be able to:</p>
+<ul style="margin-left: 20px;">
+  <li>Set up your restaurant profile</li>
+  <li>Configure staff members and permissions</li>
+  <li>Import your menu items</li>
+  <li>Start managing orders and reservations</li>
+  <li>Access analytics and reports</li>
+</ul>
+
+<p style="margin-top: 20px;">
+  Need help? Check out our <a href="{{{helpCenter}}}">Getting Started Guide</a> or <a href="mailto:support@blackpot.com">contact support</a>.
+</p>
+
+<p style="color: #7f8c8d; font-size: 12px; margin-top: 20px;">
+  Verification Code: {{verificationCode}} | Expires: {{expiryTime}} | Request ID: {{requestId}}
+</p>

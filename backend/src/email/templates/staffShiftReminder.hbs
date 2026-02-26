@@ -1,0 +1,100 @@
+<h2 style="color: #3498db;">📅 Shift Reminder</h2>
+
+<p>Hi {{staffName}},</p>
+
+<p>This is a reminder that you have a shift coming up at {{restaurantName}}.</p>
+
+<div class="info-box">
+  <strong>Shift Details</strong>
+  <table style="margin: 8px 0 0 0;">
+    <tr>
+      <td>Date:</td>
+      <td style="text-align: right;"><strong>{{shiftDate}}</strong></td>
+    </tr>
+    <tr>
+      <td>Start Time:</td>
+      <td style="text-align: right;"><strong>{{shiftStartTime}}</strong></td>
+    </tr>
+    <tr>
+      <td>End Time:</td>
+      <td style="text-align: right;">{{shiftEndTime}}</td>
+    </tr>
+    <tr>
+      <td>Duration:</td>
+      <td style="text-align: right;">{{shiftDuration}} hours</td>
+    </tr>
+    <tr>
+      <td>Position:</td>
+      <td style="text-align: right;">{{position}}</td>
+    </tr>
+  </table>
+</div>
+
+{{#if location}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Location</h3>
+
+<p>
+  <strong>{{restaurantName}}</strong><br>
+  {{location.address}}<br>
+  {{#if location.phone}}
+  <a href="tel:{{location.phone}}">{{location.phone}}</a>
+  {{/if}}
+</p>
+{{/if}}
+
+{{#if specialInstructions}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Special Instructions</h3>
+<p>{{specialInstructions}}</p>
+{{/if}}
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Pre-Shift Checklist</h3>
+
+<ul style="margin-left: 20px;">
+  <li>Arrive 15 minutes before your shift start time</li>
+  <li>Review any recent menu changes or updates</li>
+  <li>Check your assigned section or station</li>
+  <li>Ensure your uniform is clean and ready</li>
+  <li>Clock in when you arrive</li>
+</ul>
+
+{{#if omaCall24HoursBefore}}
+<div class="alert-box">
+  <strong>Confirmation Required</strong>
+  <p style="margin: 8px 0 0 0;">Please confirm your attendance by replying to this email or logging into your account. You must respond within 24 hours.</p>
+</div>
+{{/if}}
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Need to Request Time Off?</h3>
+
+<p>If you cannot work this shift, please submit a request as soon as possible. Contact your manager at least 24 hours in advance.</p>
+
+<p style="text-align: center;">
+  <a href="{{{timeOffLink}}}" class="button button-secondary">Request Time Off</a>
+</p>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Questions?</h3>
+
+<p>If you have any questions about your shift, please contact your manager:</p>
+<p>
+  <strong>{{managerName}}</strong><br>
+  <a href="tel:{{managerPhone}}">{{managerPhone}}</a><br>
+  <a href="mailto:{{managerEmail}}">{{managerEmail}}</a>
+</p>
+
+<p style="margin-top: 20px;">
+  <a href="{{{scheduleLink}}}" class="button">View Full Schedule</a>
+</p>
+
+{{#if hoursWorked}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Your Schedule This Week</h3>
+
+<p>Total hours scheduled: <strong>{{weeklyHours}}</strong> hours</p>
+{{/if}}
+
+<div style="background-color: #f0f8ff; border-left: 4px solid #3498db; padding: 16px; margin: 20px 0; border-radius: 4px;">
+  <p style="margin: 0; color: #0c3d6e;"><strong>Reminder:</strong> Clock in and out accurately to ensure proper payroll processing.</p>
+</div>
+
+<p style="color: #7f8c8d; font-size: 12px; margin-top: 20px;">
+  Shift ID: {{shiftId}} | Reminder sent: {{sentAt}}
+</p>

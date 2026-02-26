@@ -1,0 +1,135 @@
+<h2 style="color: #27ae60;">Payment Receipt</h2>
+
+<p>Hi {{customerName}},</p>
+
+<p>Thank you for your payment! Your transaction has been processed successfully.</p>
+
+<div class="success-box">
+  <strong>Payment Confirmed ✓</strong>
+  <p style="margin: 8px 0 0 0;">Receipt #{{receiptNumber}}</p>
+</div>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Transaction Details</h3>
+
+<div class="info-box">
+  <table style="margin: 0;">
+    <tr>
+      <td style="width: 50%;">Order #:</td>
+      <td style="text-align: right;"><strong>{{orderId}}</strong></td>
+    </tr>
+    <tr>
+      <td>Order Date:</td>
+      <td style="text-align: right;">{{orderDate}}</td>
+    </tr>
+    <tr>
+      <td>Payment Method:</td>
+      <td style="text-align: right;">{{paymentMethod}}</td>
+    </tr>
+    {{#if cardLastFour}}
+    <tr>
+      <td>Card:</td>
+      <td style="text-align: right;">•••• {{cardLastFour}}</td>
+    </tr>
+    {{/if}}
+    <tr>
+      <td>Payment Date:</td>
+      <td style="text-align: right;">{{paymentDate}}</td>
+    </tr>
+  </table>
+</div>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Order Summary</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Item</th>
+      <th>Qty</th>
+      <th>Price</th>
+      <th style="text-align: right;">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each items}}
+    <tr>
+      <td>{{this.name}}</td>
+      <td>{{this.quantity}}</td>
+      <td>${{this.price}}</td>
+      <td style="text-align: right;">${{this.total}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+
+<div class="info-box">
+  <table style="margin: 0;">
+    <tr>
+      <td">Subtotal:</td>
+      <td style="text-align: right;">${{subtotal}}</td>
+    </tr>
+    {{#if tax}}
+    <tr>
+      <td>Tax ({{taxRate}}%):</td>
+      <td style="text-align: right;">${{tax}}</td>
+    </tr>
+    {{/if}}
+    {{#if serviceCharge}}
+    <tr>
+      <td>Service Charge:</td>
+      <td style="text-align: right;">${{serviceCharge}}</td>
+    </tr>
+    {{/if}}
+    {{#if tip}}
+    <tr>
+      <td>Tip:</td>
+      <td style="text-align: right;">${{tip}}</td>
+    </tr>
+    {{/if}}
+    {{#if discount}}
+    <tr>
+      <td>Discount:</td>
+      <td style="text-align: right; color: #27ae60;">-${{discount}}</td>
+    </tr>
+    {{/if}}
+    <tr style="border-top: 2px solid #ddd; font-weight: bold;">
+      <td>Total Paid:</td>
+      <td style="text-align: right;"><strong>${{total}}</strong></td>
+    </tr>
+  </table>
+</div>
+
+{{#if location}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Restaurant Information</h3>
+
+<p>
+  <strong>{{restaurantName}}</strong><br>
+  {{location.address}}<br>
+  {{#if location.phone}}
+  Phone: <a href="tel:{{location.phone}}">{{location.phone}}</a><br>
+  {{/if}}
+  {{#if location.website}}
+  Website: <a href="{{{location.website}}}">{{location.website}}</a>
+  {{/if}}
+</p>
+{{/if}}
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Keep Your Receipt</h3>
+
+<p>Please keep this receipt for your records. You may need it for:</p>
+<ul style="margin-left: 20px;">
+  <li>Expense reporting or reimbursement</li>
+  <li>Returns or refund requests</li>
+  <li>Warranty or service claims</li>
+  <li>Tax purposes</li>
+</ul>
+
+{{#if refundPolicy}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Refund Policy</h3>
+<p>{{refundPolicy}}</p>
+{{/if}}
+
+<p style="margin-top: 20px;">Thank you for your business at {{restaurantName}}!</p>
+
+<p style="color: #7f8c8d; font-size: 12px; margin-top: 20px;">
+  Receipt #: {{receiptNumber}} | Transaction ID: {{transactionId}} | Date: {{paymentDate}}
+</p>

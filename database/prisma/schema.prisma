@@ -29,6 +29,7 @@ model Tenant {
   users                       User[]
   activityLogs                ActivityLog[]
   notifications               Notification[]
+  emailLogs                   EmailLog[]
   financialSetting            FinancialSetting?
   orders                      Order[]
   payments                    Payment[]
@@ -656,6 +657,56 @@ model Notification {
   createdAt DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// ===============================
+// EMAIL TRACKING & LOGGING
+// ===============================
+
+model EmailLog {
+  id              String           @id @default(uuid())
+  tenantId        String
+  to              String[]
+  cc              String[]         @default([])
+  bcc             String[]         @default([])
+  subject         String
+  templateName    String?
+  htmlContent     String?
+  emailType       EmailType
+  status          EmailStatus      @default(PENDING)
+  relatedEntityId String?           // Order ID, User ID, etc.
+  relatedEntityType String?         // "Order", "User", etc.
+  
+  // Delivery tracking
+  sentAt          DateTime?
+  deliveredAt     DateTime?
+  openedAt        DateTime?
+  clickedAt       DateTime?
+  bounceType      BounceType?
+  bounceReason    String?
+  failureReason   String?
+  
+  // Retry info
+  attempts        Int              @default(0)
+  maxAttempts     Int              @default(5)
+  nextRetryAt     DateTime?
+  
+  // Metadata
+  metadata        Json?            // Store template data, SendGrid response, etc.
+  externalId      String?          // Email service ID (SendGrid, Mailgun, etc.)
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@index([tenantId])
+  @@index([status])
+  @@index([emailType])
+  @@index([createdAt])
+  @@index([relatedEntityId])
+  @@index([to])
+  @@index([tenantId, status, emailType])
 }
 
 model FinancialSetting {
@@ -1359,4 +1410,36 @@ enum DiscrepancyStatus {
   OPEN
   UNDER_REVIEW
   RESOLVED
+}
+
+enum EmailType {
+  ORDER_CONFIRMATION
+  PAYMENT_RECEIPT
+  PASSWORD_RESET
+  ACCOUNT_VERIFICATION
+  WELCOME
+  LOW_STOCK_ALERT
+  DAILY_REPORT
+  WEEKLY_REPORT
+  STAFF_SHIFT_REMINDER
+  MARKETING_NEWSLETTER
+  FEATURE_ANNOUNCEMENT
+  CUSTOM
+}
+
+enum EmailStatus {
+  PENDING
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  FAILED
+  BOUNCED
+  UNSUBSCRIBED
+}
+
+enum BounceType {
+  HARD
+  SOFT
+  COMPLAINT
 }

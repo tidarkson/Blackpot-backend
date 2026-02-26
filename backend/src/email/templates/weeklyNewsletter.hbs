@@ -1,0 +1,128 @@
+<h2 style="color: #8e44ad;">📰 Weekly Newsletter</h2>
+
+<p>Hello {{customerName}},</p>
+
+<p>Thanks for being a loyal customer at {{restaurantName}}! Here's what's new this week.</p>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">✨ Featured This Week</h3>
+
+{{#if featuredDish}}
+<div style="background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+  <h4 style="margin-top: 0;">{{featuredDish.name}}</h4>
+  <p>{{featuredDish.description}}</p>
+  <p style="margin: 12px 0 0 0;">
+    <strong>Price: ${{featuredDish.price}}</strong>
+    {{#if featuredDish.isNew}}
+    <span style="background: #e74c3c; color: white; padding: 2px 8px; border-radius: 3px; font-size: 12px; margin-left: 8px;">NEW</span>
+    {{/if}}
+  </p>
+</div>
+{{/if}}
+
+{{#if events}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">📅 Upcoming Events</h3>
+
+{{#each events}}
+<div style="background-color: #f9f9f9; padding: 16px; margin-bottom: 12px; border-radius: 6px; border-left: 4px solid #27ae60;">
+  <h4 style="margin-top: 0; color: #27ae60;">{{this.name}}</h4>
+  <p style="margin: 8px 0;">
+    <strong>When:</strong> {{this.date}} at {{this.time}}<br>
+    <strong>Details:</strong> {{this.description}}
+  </p>
+  {{#if this.reservationLink}}
+  <a href="{{{this.reservationLink}}}" class="button" style="display: inline-block; font-size: 12px; padding: 8px 16px;">Make Reservation</a>
+  {{/if}}
+</div>
+{{/each}}
+{{/if}}
+
+{{#if promos}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">🎁 Special Offers</h3>
+
+{{#each promos}}
+<div style="background: linear-gradient(90deg, #fff100 0%, #ffed4e 100%); padding: 16px; margin-bottom: 12px; border-radius: 6px;">
+  <h4 style="margin-top: 0; color: #333;">{{this.title}}</h4>
+  <p style="margin: 8px 0; color: #333;">{{this.description}}</p>
+  <p style="margin: 8px 0; color: #333;">
+    <strong>Code:</strong> <code style="background: white; padding: 4px 8px; border-radius: 3px;">{{this.code}}</code>
+    {{#if this.expiryDate}}
+    | Valid until {{this.expiryDate}}
+    {{/if}}
+  </p>
+  {{#if this.reservationLink}}
+  <a href="{{{this.reservationLink}}}" class="button" style="display: inline-block; font-size: 12px; padding: 8px 16px;">Use Offer</a>
+  {{/if}}
+</div>
+{{/each}}
+{{/if}}
+
+{{#if recentReviews}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">⭐ Customer Feedback</h3>
+
+{{#each recentReviews}}
+<blockquote style="border-left: 4px solid #f39c12; padding-left: 16px; margin: 12px 0; color: #555; font-style: italic;">
+  "{{this.review}}"
+  <br>
+  <strong style="font-style: normal;">— {{this.customerName}}</strong>
+</blockquote>
+{{/each}}
+{{/if}}
+
+{{#if tips}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">💡 Chef's Tips</h3>
+
+<ul style="margin-left: 20px; color: #555;">
+  {{#each tips}}
+  <li>{{this}}</li>
+  {{/each}}
+</ul>
+{{/if}}
+
+{{#if news}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">📢 Latest News</h3>
+
+<p>{{{news}}}</p>
+{{/if}}
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Make Your Reservation</h3>
+
+<p>
+  Ready to visit us? Make a reservation for you and your guests.
+</p>
+
+<p style="text-align: center;">
+  <a href="{{{reservationLink}}}" class="button">Book a Table</a>
+</p>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Stay Connected</h3>
+
+<p style="text-align: center;">
+  <a href="{{{facebookLink}}}">Facebook</a> | 
+  <a href="{{{instagramLink}}}">Instagram</a> | 
+  <a href="{{{twitterLink}}}">Twitter</a>
+</p>
+
+{{#if partnersInfo}}
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Our Partners</h3>
+
+<p>We're proud to work with local suppliers and partners:</p>
+
+<ul style="margin-left: 20px;">
+  {{#each partners}}
+  <li><strong>{{this.name}}</strong> - {{this.description}}</li>
+  {{/each}}
+</ul>
+{{/if}}
+
+<div style="background-color: #ecf0f1; padding: 16px; margin: 20px 0; border-radius: 6px; text-align: center;">
+  <p style="margin: 0; color: #555;">
+    We'd love to hear from you!<br>
+    <a href="mailto:feedback@{{restaurantDomain}}">Send us your feedback</a>
+  </p>
+</div>
+
+<p style="margin-top: 20px;">See you soon at {{restaurantName}}!</p>
+
+<p style="color: #7f8c8d; font-size: 12px; margin-top: 20px;">
+  Newsletter for week of {{weekStartDate}} | Edition {{editionNumber}}
+</p>

@@ -1,0 +1,50 @@
+<h2 style="color: #f39c12;">✨ New Feature Announcement</h2>
+
+<p>Hi {{customerName}},</p>
+
+<p>We're excited to announce a new feature that will make your experience even better!</p>
+
+<div class="info-box">
+  <strong>{{title}}</strong>
+  <p style="margin: 8px 0 0 0;">{{description}}</p>
+</div>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">What's New</h3>
+
+<ul style="margin-left: 20px;">
+  {{#each features}}
+  <li>{{this}}</li>
+  {{/each}}
+</ul>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">How to Use</h3>
+
+<p>
+  This feature is now available to all {{restaurantName}} users. You can start using it immediately by logging into your account.
+</p>
+
+<p style="text-align: center;">
+  <a href="{{{learnMoreLink}}}" class="button">Learn More & Get Started</a>
+</p>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Why We Built This</h3>
+
+<p>
+  We listened to your feedback and built this feature to help you manage your restaurant more efficiently. This is part of our commitment to continuously improve the BlackPot platform.
+</p>
+
+<h3 style="margin-top: 24px; margin-bottom: 12px; color: #2c3e50;">Have Questions?</h3>
+
+<p>
+  Check out our comprehensive <a href="{{{helpCenter}}}">help documentation</a> or <a href="mailto:support@blackpot.com">contact our support team</a>.
+</p>
+
+<div style="background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-left: 4px solid #28a745; padding: 16px; margin: 20px 0; border-radius: 4px;">
+  <p style="margin: 0; color: #155724;">
+    More features are coming soon! Follow our <a href="{{{releaseNotesLink}}}">release notes</a> to stay updated.
+  </p>
+</div>
+
+<p style="color: #7f8c8d; font-size: 12px; margin-top: 20px;">
+  Announcement for {{restaurantName}} | {{announcementDate}}
+</p>

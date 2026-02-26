@@ -163,11 +163,19 @@ export const QUEUE_NAMES = {
 export const JOB_NAMES = {
   // Email jobs
   SEND_ORDER_CONFIRMATION: 'sendOrderConfirmation',
+  SEND_PAYMENT_RECEIPT: 'sendPaymentReceipt',
   SEND_PASSWORD_RESET: 'sendPasswordReset',
+  SEND_ACCOUNT_VERIFICATION: 'sendAccountVerification',
+  SEND_WELCOME: 'sendWelcome',
   SEND_LOW_STOCK_ALERT: 'sendLowStockAlert',
   SEND_DAILY_REPORT: 'sendDailyReport',
   SEND_WEEKLY_REPORT: 'sendWeeklyReport',
+  SEND_STAFF_SHIFT_REMINDER: 'sendStaffShiftReminder',
+  SEND_WEEKLY_NEWSLETTER: 'sendWeeklyNewsletter',
+  SEND_FEATURE_ANNOUNCEMENT: 'sendFeatureAnnouncement',
   SEND_CUSTOM_EMAIL: 'sendCustomEmail',
+  SEND_BULK_EMAIL: 'sendBulkEmail',
+  SEND_TEST_EMAIL: 'sendTestEmail',
 
   // Report jobs
   GENERATE_FINANCIAL_REPORT: 'generateFinancialReport',
