@@ -9,7 +9,10 @@ on:
       - 'backend/**'
       - 'database/**'
       - '.github/workflows/deploy-backend.yml'
+      - 'Dockerfile'
+      - '.dockerignore'
       - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:  # Allow manual trigger
 
 env:
@@ -86,6 +89,45 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Build Docker image
+        run: docker build -t blackpot-backend:ci .
+
+      - name: Start container for smoke test
+        run: |
+          docker run -d --name blackpot-backend-smoke -p 3000:3000 \
+            -e JWT_SECRET=ci-test-secret \
+            -e DATABASE_URL=postgresql://postgres:test@127.0.0.1:5432/blackpot_test \
+            -e REDIS_ENABLED=false \
+            blackpot-backend:ci
+
+      - name: Verify container health endpoint
+        run: |
+          for attempt in {1..30}; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/health || true)
+            if [ "$status" -eq 200 ]; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          docker logs blackpot-backend-smoke
+          exit 1
+
+      - name: Enforce image size budget
+        run: |
+          image_size_bytes=$(docker image inspect blackpot-backend:ci --format '{{.Size}}')
+          image_size_mb=$((image_size_bytes / 1024 / 1024))
+          echo "Image size: ${image_size_mb}MB"
+          if [ "$image_size_mb" -ge 500 ]; then
+            echo "Image exceeds 500MB limit"
+            exit 1
+          fi
+
+      - name: Stop smoke test container
+        if: always()
+        run: docker rm -f blackpot-backend-smoke || true
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -102,7 +144,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag blackpot-backend:ci $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest

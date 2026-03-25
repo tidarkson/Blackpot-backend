@@ -7,4 +7,5 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/backend/src/$1',
   },
+  setupFilesAfterEnv: ['<rootDir>/backend/jest.setup.ts'],
 };

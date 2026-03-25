@@ -3,6 +3,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import logger from '../config/logger';
 import CustomerService from './CustomerService';
 import InventoryService from './InventoryService';
+import { socketService } from './SocketService';
 
 export class OrderService {
   private prisma: PrismaClient;
@@ -68,7 +69,7 @@ export class OrderService {
         );
       }
 
-      return this.prisma.order.create({
+      const order = await this.prisma.order.create({
         data: {
           tableId,
           serverId,
@@ -88,6 +89,10 @@ export class OrderService {
           customer: true,
         },
       });
+
+      socketService.emitOrderCreated(tenantId, order);
+
+      return order;
     } catch (error) {
       logger.error(`Error creating order:`, error);
       throw error;
@@ -293,6 +298,9 @@ export class OrderService {
       });
 
       logger.info(`📝 Order status updated: ${orderId} → ${newStatus}`);
+
+      socketService.emitOrderStatusUpdated(tenantId, orderId, newStatus, updatedOrder);
+
       return updatedOrder;
     } catch (error: any) {
       logger.error(`Error updating order status:`, error.message);

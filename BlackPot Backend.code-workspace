@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../restaurant-pos"
+		}
+	],
+	"settings": {
+		"prisma.pinToPrisma6": true
+	}
+}

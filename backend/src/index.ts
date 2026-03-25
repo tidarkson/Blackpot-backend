@@ -1,10 +1,13 @@
 import express, { Request, Response } from 'express';
+import { createServer } from 'node:http';
 import cors from 'cors';
 import helmet from 'helmet';
 import session from 'express-session';
 import * as Sentry from '@sentry/node';
+import { Server as SocketIOServer } from 'socket.io';
 import { config } from './config/environment';
 import logger from './config/logger';
+import { initializeSocketIO } from './config/socket';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { 
@@ -45,6 +48,12 @@ import dashboardRoutes from './routes/dashboard';
 import jobsRoutes from './routes/jobs';
 
 const app = express();
+const httpServer = createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: config.CORS_ORIGIN,
+  },
+});
 
 // ✅ Initialize Sentry FIRST before any middleware
 initSentry();
@@ -52,6 +61,8 @@ initSentry();
 // Initialize Redis on startup
 async function startServer() {
   try {
+    initializeSocketIO(io);
+
     // Initialize Redis for distributed rate limiting
     if (config.REDIS_ENABLED) {
       await initializeRedis();
@@ -151,7 +162,7 @@ async function startServer() {
     app.use(errorHandler);
 
     // Start server
-    const server = app.listen(config.PORT, config.HOST, () => {
+    httpServer.listen(config.PORT, config.HOST, () => {
       logger.info(`🚀 Server running at http://${config.HOST}:${config.PORT}`);
       logger.info(`📝 API available at http://${config.HOST}:${config.PORT}${config.API_PREFIX}`);
       if (config.REDIS_ENABLED) {
@@ -165,7 +176,7 @@ async function startServer() {
     const shutdown = async () => {
       logger.info('🛑 Shutting down server gracefully...');
       
-      server.close(async () => {
+      httpServer.close(async () => {
         logger.info('✅ Server closed');
         
         // Close Redis connection
@@ -222,3 +233,4 @@ async function startServer() {
 startServer();
 
 export default app;
+export { io, httpServer };

@@ -129,7 +129,7 @@ export const captureException = (error: Error, context?: Record<string, any>) =>
  * Useful for tracking important events
  */
 export const captureMessage = (message: string, level: Sentry.SeverityLevel = 'info') => {
-  Sentry.captureMessage(message, level as Sentry.SeverityLevel);
+  Sentry.captureMessage(message, { level });
 };
 
 /**
@@ -147,7 +147,6 @@ export const addBreadcrumb = (
     category,
     level,
     data,
-    timestamp: Date.now() / 1000,
   });
 };
 

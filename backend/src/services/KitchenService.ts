@@ -92,7 +92,14 @@ export class KitchenService {
     return this.prisma.orderItem.update({
       where: { id: itemId },
       data: { preparedAt: new Date() },
-      include: { menuItem: true },
+      include: {
+        menuItem: true,
+        orderCourse: {
+          include: {
+            order: true,
+          },
+        },
+      },
     });
   }
 

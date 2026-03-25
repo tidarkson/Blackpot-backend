@@ -43,6 +43,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
   try {
     const payload = authService.verifyToken(token);
     req.user = payload;
+    (req as Request & { tenantId?: string; userId?: string }).tenantId = payload.tenantId;
+    (req as Request & { tenantId?: string; userId?: string }).userId = payload.userId;
     next();
   } catch (error) {
     return res.status(401).json({

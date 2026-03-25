@@ -3,6 +3,7 @@ import { KitchenService } from '../services/KitchenService';
 import { AuthRequest } from '../types/auth';
 import { z } from 'zod';
 import logger from '../config/logger';
+import { socketService } from '../services/SocketService';
 
 export class KitchenController {
   constructor(private kitchenService: KitchenService) {}
@@ -102,6 +103,12 @@ export class KitchenController {
       }
 
       logger.info('Order item fired', { itemId, tenantId });
+      socketService.emitKitchenAlert(tenantId, {
+        type: 'kitchen:item_fired',
+        itemId,
+        orderId: item.orderCourse?.orderId,
+        item,
+      });
       res.json({
         success: true,
         data: item,
@@ -131,6 +138,12 @@ export class KitchenController {
       }
 
       logger.info('Order item completed', { itemId, tenantId });
+      socketService.emitKitchenAlert(tenantId, {
+        type: 'kitchen:item_completed',
+        itemId,
+        orderId: item.orderCourse?.orderId,
+        item,
+      });
       res.json({
         success: true,
         data: item,
@@ -160,6 +173,16 @@ export class KitchenController {
       }
 
       logger.info('Order item served', { itemId, tenantId });
+      socketService.emitTableStatusChanged(
+        tenantId,
+        item.orderCourse?.order?.tableId || 'unknown',
+        'ITEM_SERVED',
+        {
+          itemId,
+          orderId: item.orderCourse?.orderId,
+          item,
+        }
+      );
       res.json({
         success: true,
         data: item,
