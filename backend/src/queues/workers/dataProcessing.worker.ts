@@ -10,6 +10,7 @@ import { dataProcessingQueue } from '../definitions/dataProcessing.queue';
 import { DataProcessingJobData } from '../definitions/dataProcessing.queue';
 import { InventoryService } from '../../services/InventoryService';
 import { PrismaClient } from '@prisma/client';
+import { moveToDeadLetterQueue } from '../utils/deadLetter';
 
 const inventoryService = new InventoryService();
 const prisma = new PrismaClient();
@@ -206,6 +207,17 @@ export class DataProcessingWorker {
 
     this.worker.on('progress', (job, progress) => {
       logger.debug(`📈 Data job ${job.id} progress: ${progress}%`);
+    });
+
+    this.worker.on('failed', async (job, error) => {
+      if (!job) {
+        logger.error('❌ Data processing job failed with missing job reference', {
+          error: error.message,
+        });
+        return;
+      }
+
+      await moveToDeadLetterQueue(job, error, 'data-processing-worker');
     });
   }
 

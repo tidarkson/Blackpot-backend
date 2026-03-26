@@ -8,6 +8,7 @@ export { emailQueue, type EmailJobData } from './definitions/email.queue';
 export { reportQueue, type ReportJobData } from './definitions/report.queue';
 export { dataProcessingQueue, type DataProcessingJobData } from './definitions/dataProcessing.queue';
 export { scheduledQueue, type ScheduledJobData } from './definitions/scheduled.queue';
+export { failedJobsQueue, type FailedJobData } from './definitions/failedJobs.queue';
 
 // Queue configuration
 export {

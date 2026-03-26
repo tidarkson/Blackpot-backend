@@ -31,6 +31,12 @@ router.post('/register', registrationLimiter, AuthController.register);
 router.post('/login', authLimiter, AuthController.login);
 
 /**
+ * POST /api/auth/refresh
+ * Exchange valid refresh token for a new access token
+ */
+router.post('/refresh', AuthController.refreshToken);
+
+/**
  * POST /api/auth/forgot-password
  * Rate Limit: 3 attempts per hour per IP
  * Rationale: Prevent email flooding/account takeover attempts

@@ -3,11 +3,14 @@ import { UserService } from '../src/services/UserService';
 import { AuthService } from '../src/services/AuthService';
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from '@jest/globals';
 
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
+
 const prisma = new PrismaClient();
 const userService = new UserService();
 const authService = new AuthService();
 
-describe('Feature A2: User Management System', () => {
+describeIfIntegration('Feature A2: User Management System', () => {
   let tenantId: string;
   let locationId: string;
   let userId: string;

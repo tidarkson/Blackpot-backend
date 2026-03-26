@@ -10,6 +10,7 @@ import { scheduledQueue, ScheduledJobData } from '../definitions/scheduled.queue
 import { ReportService } from '../../services/ReportService';
 import { EmailService } from '../../services/EmailService';
 import { PrismaClient } from '@prisma/client';
+import { moveToDeadLetterQueue } from '../utils/deadLetter';
 
 const reportService = new ReportService();
 const emailService = new EmailService();
@@ -292,6 +293,15 @@ export class ScheduledWorker {
 
     this.worker.on('stalled', (jobId) => {
       logger.warn(`⚠️ Scheduled job stalled: ${jobId}`);
+    });
+
+    this.worker.on('failed', async (job, error) => {
+      if (!job) {
+        logger.error('❌ Scheduled job failed with missing job reference', { error: error.message });
+        return;
+      }
+
+      await moveToDeadLetterQueue(job, error, 'scheduled-worker');
     });
   }
 

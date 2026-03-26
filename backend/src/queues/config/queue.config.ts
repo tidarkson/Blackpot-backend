@@ -9,10 +9,10 @@ import logger from '../../config/logger';
 
 // Redis connection configuration
 export const redisConnection = {
-  host: config.REDIS_HOST || 'localhost',
-  port: config.REDIS_PORT || 6379,
-  password: config.REDIS_PASSWORD,
-  db: config.REDIS_DB || 0,
+  host: config.REDIS_HOST,
+  port: config.REDIS_PORT,
+  password: config.REDIS_PASSWORD || undefined,
+  db: config.REDIS_DB,
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
   enableOfflineQueue: true,
@@ -154,7 +154,7 @@ export const QUEUE_NAMES = {
   REPORT: 'report',
   DATA_PROCESSING: 'dataProcessing',
   SCHEDULED: 'scheduled',
-  DEAD_LETTER: 'dead-letter',
+  DEAD_LETTER: 'failed-jobs',
 };
 
 /**

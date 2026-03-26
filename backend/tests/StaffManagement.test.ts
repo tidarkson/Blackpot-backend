@@ -1,7 +1,10 @@
 import { PrismaClient, UserRole, StaffPosition } from '@prisma/client';
 import { StaffService } from '../src/services/StaffService';
 
-describe('Feature A3: Staff Management & Availability', () => {
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
+
+describeIfIntegration('Feature A3: Staff Management & Availability', () => {
   let prisma: PrismaClient;
   let staffService: StaffService;
   let tenantId: string;

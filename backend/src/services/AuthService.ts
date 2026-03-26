@@ -35,7 +35,10 @@ export class AuthService {
    * @param payload - JWT payload with user data
    * @returns Object with accessToken and refreshToken
    */
-  generateTokens(payload: Omit<JWTPayload, 'tenantId'> & { tenantId: string }): {
+  generateTokens(
+    payload: Omit<JWTPayload, 'tenantId'> & { tenantId: string },
+    rememberMe: boolean = false
+  ): {
     accessToken: string;
     refreshToken: string;
   } {
@@ -44,7 +47,7 @@ export class AuthService {
     } as any);
 
     const refreshToken = jwt.sign(
-      { userId: payload.userId, tenantId: payload.tenantId },
+      { userId: payload.userId, tenantId: payload.tenantId, rememberMe },
       config.JWT_SECRET,
       { expiresIn: config.REFRESH_TOKEN_EXPIRY } as any
     );
@@ -71,6 +74,74 @@ export class AuthService {
       }
       throw new Error('Invalid token');
     }
+  }
+
+  /**
+   * Verify refresh token and rotate access/refresh token pair.
+   */
+  async refreshAccessToken(refreshToken: string): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    rememberMe: boolean;
+  }> {
+    if (!refreshToken) {
+      throw new Error('No refresh token provided');
+    }
+
+    let decoded: jwt.JwtPayload;
+    try {
+      decoded = jwt.verify(refreshToken, config.JWT_SECRET as any) as jwt.JwtPayload;
+    } catch (error: any) {
+      if (error.name === 'TokenExpiredError') {
+        throw new Error('Refresh token has expired');
+      }
+      throw new Error('Invalid refresh token');
+    }
+
+    const userId = decoded.userId as string | undefined;
+    const tenantId = decoded.tenantId as string | undefined;
+
+    if (!userId || !tenantId) {
+      throw new Error('Invalid refresh token payload');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { tenant: true, location: true },
+    });
+
+    if (!user || !user.isActive) {
+      throw new Error('User not found or inactive');
+    }
+
+    const rememberMe = decoded.rememberMe === true;
+
+    const tokens = this.generateTokens(
+      {
+        userId: user.id,
+        tenantId: user.tenantId,
+        locationId: user.locationId || '',
+        role: user.role,
+        email: user.email,
+      },
+      rememberMe
+    );
+
+    return {
+      ...tokens,
+      rememberMe,
+    };
+  }
+
+  /**
+   * Get remaining token lifetime in seconds for Redis TTL operations.
+   */
+  getTokenRemainingLifetime(token: string): number {
+    const decoded = jwt.decode(token) as jwt.JwtPayload | null;
+    if (!decoded?.exp) return 0;
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    return Math.max(decoded.exp - nowSeconds, 0);
   }
 
   /**

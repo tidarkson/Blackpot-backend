@@ -13,6 +13,7 @@ import logger from '../../config/logger';
 import { emailQueue } from '../definitions/email.queue';
 import { EmailJobData } from '../definitions/email.queue';
 import { EmailType, EmailStatus } from '@prisma/client';
+import { moveToDeadLetterQueue } from '../utils/deadLetter';
 
 // Rate limiter for email service (respect SendGrid rate limits: 100 emails/min = ~6 per second)
 const emailRateLimiter = {
@@ -211,8 +212,14 @@ export class EmailWorker {
     });
 
     // Log failed jobs
-    (this.worker as any).on('failed', (job: Job, err: Error) => {
+    (this.worker as any).on('failed', async (job: Job | undefined, err: Error) => {
+      if (!job) {
+        logger.error('❌ Email job failed with missing job reference', { error: err.message });
+        return;
+      }
+
       logger.debug(`❌ Email job failed: ${job.name} - ${err.message}`);
+      await moveToDeadLetterQueue(job, err, 'email-worker');
     });
   }
 

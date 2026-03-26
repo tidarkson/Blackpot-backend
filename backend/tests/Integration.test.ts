@@ -2,6 +2,12 @@ import request from 'supertest';
 import { PrismaClient, OrderStatus, CourseType, ReservationStatus } from '@prisma/client';
 import ReservationService from '../src/services/ReservationService';
 import AvailabilityService from '../src/services/AvailabilityService';
+import {
+  createTestLocation,
+  createTestTenant,
+  createTestUser,
+  cleanupTestData,
+} from './helpers/testSetup';
 
 /**
  * Integration Tests for Order Management API
@@ -10,14 +16,14 @@ import AvailabilityService from '../src/services/AvailabilityService';
 
 describe('Order Management API Integration Tests', () => {
   const API_URL = process.env.API_URL || 'http://localhost:3000/api';
-  const authToken = process.env.TEST_AUTH_TOKEN || 'test-token';
+  let authToken: string;
 
   const prisma = new PrismaClient();
 
   let orderId: string;
   let courseId: string;
-  let tableId: string = 'table-test-001';
-  let serverId: string = 'server-test-001';
+  let tableId: string;
+  let serverId: string;
   let testTenantId: string;
   let testTableId: string;
   let testUserId: string;
@@ -25,35 +31,13 @@ describe('Order Management API Integration Tests', () => {
 
   beforeAll(async () => {
     // Setup test data
-    const tenant = await prisma.tenant.create({
-      data: {
-        name: 'Test Restaurant',
-        isActive: true,
-      },
-    });
-
-    testTenantId = tenant.id;
-
-    const location = await prisma.location.create({
-      data: {
-        tenantId: testTenantId,
-        name: 'Main Location',
-      },
-    });
-
-    const user = await prisma.user.create({
-      data: {
-        tenantId: testTenantId,
-        email: `test-server-${Date.now()}@restaurant.com`,
-        name: 'Test Server',
-        passwordHash: 'hashed',
-        role: 'STAFF',
-        locationId: location.id,
-        positions: ['SERVER'],
-      },
-    });
+    testTenantId = await createTestTenant();
+    const location = await createTestLocation(testTenantId);
+    const { user, token } = await createTestUser(testTenantId, 'MANAGER');
+    authToken = token;
 
     testUserId = user.id;
+    serverId = user.id;
 
     const table = await prisma.table.create({
       data: {
@@ -70,6 +54,7 @@ describe('Order Management API Integration Tests', () => {
     });
 
     testTableId = table.id;
+    tableId = table.id;
 
     reservationData = {
       tableId: testTableId,
@@ -84,11 +69,7 @@ describe('Order Management API Integration Tests', () => {
 
   afterAll(async () => {
     // Cleanup test data
-    await prisma.reservation.deleteMany({ where: { tenantId: testTenantId } });
-    await prisma.table.deleteMany({ where: { tenantId: testTenantId } });
-    await prisma.user.deleteMany({ where: { tenantId: testTenantId } });
-    await prisma.location.deleteMany({ where: { tenantId: testTenantId } });
-    await prisma.tenant.deleteMany({ where: { id: testTenantId } });
+    await cleanupTestData(testTenantId);
     await prisma.$disconnect();
   });
 

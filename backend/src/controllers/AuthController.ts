@@ -3,15 +3,52 @@ import { AuthService } from '../services/AuthService';
 import { PasswordResetService } from '../services/PasswordResetService';
 import { EmailService } from '../services/EmailService';
 import { sessionService } from '../services/SessionService';
+import { TokenBlacklistService } from '../services/TokenBlacklistService';
 
 const passwordResetService = new PasswordResetService();
 const emailService = new EmailService();
 const authService = new AuthService();
+const tokenBlacklistService = new TokenBlacklistService();
+
+const DEFAULT_REFRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const REMEMBER_ME_REFRESH_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+const getRefreshCookieOptions = (rememberMe: boolean = false) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'strict' as const,
+  maxAge: rememberMe ? REMEMBER_ME_REFRESH_MAX_AGE_MS : DEFAULT_REFRESH_MAX_AGE_MS,
+});
 
 export class AuthController {
+  private static getRefreshTokenFromRequest(req: Request): string | null {
+    if (req.cookies?.refreshToken) {
+      return req.cookies.refreshToken as string;
+    }
+
+    const cookieHeader = req.headers.cookie;
+    if (cookieHeader) {
+      const refreshCookie = cookieHeader
+        .split(';')
+        .map(cookie => cookie.trim())
+        .find(cookie => cookie.startsWith('refreshToken='));
+
+      if (refreshCookie) {
+        return decodeURIComponent(refreshCookie.split('=')[1] || '');
+      }
+    }
+
+    if (req.body?.refreshToken) {
+      return req.body.refreshToken;
+    }
+
+    return null;
+  }
+
   static async login(req: Request, res: Response) {
     try {
-      const { email, password, rememberMe } = req.body;
+      const { email, password } = req.body;
+      const rememberMe = req.body.rememberMe === true || req.body.remember_me === true;
       const ipAddress = req.ip || req.socket.remoteAddress;
 
       // Validate required fields
@@ -25,6 +62,9 @@ export class AuthController {
       }
 
       const result = await authService.login(email, password, ipAddress);
+
+      // Keep refresh token in httpOnly cookie to reduce XSS exposure.
+      res.cookie('refreshToken', result.refreshToken, getRefreshCookieOptions(rememberMe));
 
       // Create Redis-backed session
       try {
@@ -178,8 +218,8 @@ export class AuthController {
       const userId = req.user!.userId;
 
       if (token) {
-        // TODO: Blacklist the token (requires token expiry from JWT decode)
-        // await blacklistService.blacklistToken(token, expiryDate);
+        const tokenTtl = authService.getTokenRemainingLifetime(token);
+        await tokenBlacklistService.blacklistToken(token, tokenTtl);
       }
 
       // Clear Redis session
@@ -192,6 +232,11 @@ export class AuthController {
 
       // Clear any other session data if needed
       // This is primarily for frontend to clear localStorage
+      res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+      });
 
       return res.status(200).json({
         status: 'success',
@@ -205,6 +250,48 @@ export class AuthController {
         code: 500,
         error: 'LOGOUT_FAILED',
         message: error.message,
+      });
+    }
+  }
+
+  static async refreshToken(req: Request, res: Response) {
+    try {
+      const refreshToken = AuthController.getRefreshTokenFromRequest(req);
+
+      if (!refreshToken) {
+        return res.status(401).json({
+          status: 'error',
+          error: 'NO_REFRESH_TOKEN',
+        });
+      }
+
+      const isRefreshTokenRevoked = await tokenBlacklistService.isRefreshTokenRevoked(refreshToken);
+      if (isRefreshTokenRevoked) {
+        return res.status(401).json({
+          status: 'error',
+          error: 'INVALID_REFRESH_TOKEN',
+        });
+      }
+
+      const result = await authService.refreshAccessToken(refreshToken);
+
+      // Enforce one-time refresh token usage by revoking the old token.
+      const refreshTtl = authService.getTokenRemainingLifetime(refreshToken);
+      await tokenBlacklistService.revokeRefreshToken(refreshToken, refreshTtl);
+
+      // Rotate refresh token on every refresh call.
+      res.cookie('refreshToken', result.refreshToken, getRefreshCookieOptions(result.rememberMe));
+
+      return res.status(200).json({
+        status: 'success',
+        data: {
+          accessToken: result.accessToken,
+        },
+      });
+    } catch (error: any) {
+      return res.status(401).json({
+        status: 'error',
+        error: 'INVALID_REFRESH_TOKEN',
       });
     }
   }

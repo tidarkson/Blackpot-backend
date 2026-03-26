@@ -46,6 +46,8 @@ import scheduleRoutes from './routes/schedules';
 import advancedSchedulingRoutes from './routes/advanced-scheduling';
 import dashboardRoutes from './routes/dashboard';
 import jobsRoutes from './routes/jobs';
+import { emailQueue } from './queues/definitions/email.queue';
+import { scheduledQueue } from './queues/definitions/scheduled.queue';
 
 const app = express();
 const httpServer = createServer(app);
@@ -101,11 +103,17 @@ async function startServer() {
     // Health check endpoint
     app.get('/health', async (req: Request, res: Response) => {
       const redisHealthy = config.REDIS_ENABLED ? await checkRedisHealth() : true;
+      const emailPaused = await emailQueue.getQueue().isPaused();
+      const scheduledPaused = await scheduledQueue.getQueue().isPaused();
       
       res.json({
         status: 'OK',
         timestamp: new Date().toISOString(),
         redis: config.REDIS_ENABLED ? (redisHealthy ? 'connected' : 'disconnected') : 'disabled',
+        workers: {
+          email: emailPaused ? 'paused' : 'running',
+          scheduled: scheduledPaused ? 'paused' : 'running',
+        },
       });
     });
 

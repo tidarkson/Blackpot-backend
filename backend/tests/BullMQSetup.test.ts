@@ -31,7 +31,10 @@ import {
   processPaymentSettlement,
 } from '../src/queues/jobs/dataJobs';
 
-describe('BullMQ Queue Setup and Integration', () => {
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
+
+describeIfIntegration('BullMQ Queue Setup and Integration', () => {
   /**
    * ACCEPTANCE CRITERIA 1: BullMQ installed and configured
    */

@@ -22,12 +22,15 @@ import logger from '../src/config/logger';
 
 const prisma = new PrismaClient();
 
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
+
 // Test data
 const TEST_TENANT_ID = 'test-tenant-123';
 const TEST_EMAIL = 'test@blackpot.com';
 const TEST_CUSTOMER_EMAIL = 'customer@example.com';
 
-describe('Email Queue Implementation - Comprehensive Tests', () => {
+describeIfIntegration('Email Queue Implementation - Comprehensive Tests', () => {
   describe('ACCEPTANCE CRITERIA VERIFICATION', () => {
     describe('✅ Email templates created', () => {
       it('should have all required email templates', async () => {

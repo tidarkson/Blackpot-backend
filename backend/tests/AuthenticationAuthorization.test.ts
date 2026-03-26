@@ -9,6 +9,7 @@ import { PasswordResetService } from '../src/services/PasswordResetService';
 import { AuthController } from '../src/controllers/AuthController';
 import { authenticate, requireRole } from '../src/middleware/auth';
 import { config } from '../src/config/environment';
+import { createTestLocation, createTestTenant, createTestUser, cleanupTestData } from './helpers/testSetup';
 
 const prisma = new PrismaClient();
 let app: Express;
@@ -60,80 +61,21 @@ describe('Feature A1: Authentication & Authorization System', () => {
     });
 
     // Create test tenant and location
-    const tenant = await prisma.tenant.create({
-      data: {
-        name: 'Auth Test Restaurant',
-        isActive: true,
-      },
-    });
-
-    tenantId = tenant.id;
-
-    const location = await prisma.location.create({
-      data: {
-        tenantId,
-        name: 'Main Location',
-      },
-    });
-
-    locationId = location.id;
+    tenantId = await createTestTenant();
+    const seededLocation = await createTestLocation(tenantId);
+    locationId = seededLocation.id;
 
     // Create test users with different roles
-    const passwordHash = await authService.hashPassword('TestPassword123!');
+    const customer = await createTestUser(tenantId, 'CUSTOMER');
+    const owner = await createTestUser(tenantId, 'OWNER');
+    const manager = await createTestUser(tenantId, 'MANAGER');
+    const staff = await createTestUser(tenantId, 'STAFF');
 
-    // Use unique timestamps in emails to avoid conflicts
-    const timestamp = Date.now();
-    testUser = await prisma.user.create({
-      data: {
-        tenantId,
-        email: `user-${timestamp}@test.com`,
-        name: 'Test User',
-        passwordHash,
-        role: 'CUSTOMER',
-        locationId,
-        isActive: true,
-      },
-      include: { tenant: true, location: true },
-    });
-
-    testAdmin = await prisma.user.create({
-      data: {
-        tenantId,
-        email: `admin-${timestamp}@test.com`,
-        name: 'Admin User',
-        passwordHash,
-        role: 'OWNER',
-        locationId,
-        isActive: true,
-      },
-      include: { tenant: true, location: true },
-    });
-
-    testManager = await prisma.user.create({
-      data: {
-        tenantId,
-        email: `manager-${timestamp}@test.com`,
-        name: 'Manager User',
-        passwordHash,
-        role: 'MANAGER',
-        locationId,
-        isActive: true,
-      },
-      include: { tenant: true, location: true },
-    });
-
-    testStaff = await prisma.user.create({
-      data: {
-        tenantId,
-        email: `staff-${timestamp}@test.com`,
-        name: 'Staff User',
-        passwordHash,
-        role: 'STAFF',
-        locationId,
-        isActive: true,
-      },
-      include: { tenant: true, location: true },
-    });
+    testUser = customer.user;
+    testAdmin = owner.user;
+    testManager = manager.user;
+    testStaff = staff.user;
+    locationId = testUser.locationId || locationId;
 
     // Generate tokens for test user
     const tokens = authService.generateTokens({
@@ -150,9 +92,7 @@ describe('Feature A1: Authentication & Authorization System', () => {
 
   afterAll(async () => {
     // Cleanup
-    await prisma.user.deleteMany({ where: { tenantId } });
-    await prisma.location.deleteMany({ where: { tenantId } });
-    await prisma.tenant.deleteMany({ where: { id: tenantId } });
+    await cleanupTestData(tenantId);
     await prisma.$disconnect();
   });
 

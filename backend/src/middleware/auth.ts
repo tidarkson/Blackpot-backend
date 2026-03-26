@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/AuthService';
 import { JWTPayload } from '../types/auth';
-// import { TokenBlacklistService } from '../services/TokenBlacklistService';
-// const blacklistService = new TokenBlacklistService();
+import { TokenBlacklistService } from '../services/TokenBlacklistService';
+
+const blacklistService = new TokenBlacklistService();
 
 declare global {
   namespace Express {
@@ -41,6 +42,16 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
   }
 
   try {
+    const blacklisted = await blacklistService.isBlacklisted(token);
+    if (blacklisted) {
+      return res.status(401).json({
+        status: 'error',
+        code: 401,
+        error: 'INVALID_TOKEN',
+        message: 'Token has been invalidated',
+      });
+    }
+
     const payload = authService.verifyToken(token);
     req.user = payload;
     (req as Request & { tenantId?: string; userId?: string }).tenantId = payload.tenantId;

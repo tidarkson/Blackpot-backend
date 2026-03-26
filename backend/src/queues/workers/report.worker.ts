@@ -10,6 +10,7 @@ import logger from '../../config/logger';
 import { reportQueue } from '../definitions/report.queue';
 import { ReportJobData } from '../definitions/report.queue';
 import { EmailService } from '../../services/EmailService';
+import { moveToDeadLetterQueue } from '../utils/deadLetter';
 
 const reportService = new ReportService();
 const emailService = new EmailService();
@@ -297,6 +298,15 @@ export class ReportWorker {
 
     this.worker.on('progress', (job, progress) => {
       logger.debug(`📈 Report job ${job.id} progress: ${progress}%`);
+    });
+
+    this.worker.on('failed', async (job, error) => {
+      if (!job) {
+        logger.error('❌ Report job failed with missing job reference', { error: error.message });
+        return;
+      }
+
+      await moveToDeadLetterQueue(job, error, 'report-worker');
     });
   }
 
