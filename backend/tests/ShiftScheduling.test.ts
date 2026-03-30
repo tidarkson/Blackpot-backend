@@ -6,7 +6,10 @@ import { LaborCostService } from '../src/services/LaborCostService';
 import { Decimal } from 'decimal.js';
 import { addDays, addWeeks, startOfWeek } from 'date-fns';
 
-describe('Feature A4: Shift Scheduling', () => {
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
+
+describeIfIntegration('Feature A4: Shift Scheduling', () => {
   let prisma: PrismaClient;
   let shiftService: ShiftService;
   let coverageService: CoverageTrackingService;

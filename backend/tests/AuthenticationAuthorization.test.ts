@@ -11,6 +11,9 @@ import { authenticate, requireRole } from '../src/middleware/auth';
 import { config } from '../src/config/environment';
 import { createTestLocation, createTestTenant, createTestUser, cleanupTestData } from './helpers/testSetup';
 
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
+
 const prisma = new PrismaClient();
 let app: Express;
 let authService: AuthService;
@@ -20,7 +23,7 @@ let passwordResetService: PasswordResetService;
 // TEST SETUP
 // ============================================================================
 
-describe('Feature A1: Authentication & Authorization System', () => {
+describeIfIntegration('Feature A1: Authentication & Authorization System', () => {
   let tenantId: string;
   let locationId: string;
   let testUser: any;

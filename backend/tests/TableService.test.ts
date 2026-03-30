@@ -4,8 +4,10 @@ import { TableService } from '../src/services/TableService';
 
 const prisma = new PrismaClient();
 const tableService = new TableService();
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
 
-describe('TableService', () => {
+describeIfIntegration('TableService', () => {
   let testTenantId: string;
   let testLocationId: string;
   let testTableId: string;

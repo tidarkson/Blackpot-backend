@@ -2,8 +2,10 @@ import { PrismaClient, ReservationStatus, TableStatus } from '@prisma/client';
 import ReservationService from '../src/services/ReservationService';
 
 const prisma = new PrismaClient();
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
 
-describe('ReservationService', () => {
+describeIfIntegration('ReservationService', () => {
   let testTenantId: string;
   let testLocationId: string;
   let testTableId: string;

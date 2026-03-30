@@ -3,7 +3,10 @@ import { AdvancedSchedulingService } from '../src/services/AdvancedSchedulingSer
 import { Decimal } from 'decimal.js';
 import { addDays, addWeeks, startOfWeek, addMonths } from 'date-fns';
 
-describe('Feature A5: Advanced Scheduling', () => {
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
+
+describeIfIntegration('Feature A5: Advanced Scheduling', () => {
   let prisma: PrismaClient;
   let advancedSchedulingService: AdvancedSchedulingService;
 

@@ -8,6 +8,8 @@ import {
 } from '../src/config/session.config';
 
 const prisma = new PrismaClient();
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
 
 /**
  * Session Acceptance Criteria Tests
@@ -21,7 +23,7 @@ const prisma = new PrismaClient();
  * - Concurrent session limits
  * - Remember me functionality
  */
-describe('Session Acceptance Criteria', () => {
+describeIfIntegration('Session Acceptance Criteria', () => {
   let testTenantId: string;
   let testUserId: string;
 

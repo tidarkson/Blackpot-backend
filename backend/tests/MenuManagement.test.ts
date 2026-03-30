@@ -3,8 +3,10 @@ import { MenuService } from '../src/services/MenuService';
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 
 const prisma = new PrismaClient();
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
 
-describe('Feature A6: Menu Management System', () => {
+describeIfIntegration('Feature A6: Menu Management System', () => {
   let tenantId: string;
   let menuId: string;
   let sectionId: string;

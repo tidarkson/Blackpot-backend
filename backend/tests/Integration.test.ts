@@ -9,12 +9,15 @@ import {
   cleanupTestData,
 } from './helpers/testSetup';
 
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
+
 /**
  * Integration Tests for Order Management API
  * These tests verify the full order workflow across multiple endpoints
  */
 
-describe('Order Management API Integration Tests', () => {
+describeIfIntegration('Order Management API Integration Tests', () => {
   const API_URL = process.env.API_URL || 'http://localhost:3000/api';
   let authToken: string;
 

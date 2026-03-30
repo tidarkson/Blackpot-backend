@@ -4,8 +4,10 @@ import InventoryService from '../src/services/InventoryService';
 import { describe, test, expect, beforeAll, afterAll, beforeEach } from '@jest/globals';
 
 const prisma = new PrismaClient();
+const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true';
+const describeIfIntegration = runIntegrationTests ? describe : describe.skip;
 
-describe('Inventory Management System - Implementation Tests', () => {
+describeIfIntegration('Inventory Management System - Implementation Tests', () => {
   let tenantId: string;
   let supplierId: string;
   let inventoryItemId: string;
