@@ -51,9 +51,17 @@ import { scheduledQueue } from './queues/definitions/scheduled.queue';
 
 const app = express();
 const httpServer = createServer(app);
+const corsOptions: cors.CorsOptions = {
+  origin: config.CORS_ORIGIN,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: config.CORS_ORIGIN,
+    credentials: true,
   },
 });
 
@@ -78,7 +86,7 @@ async function startServer() {
 
     // Security middleware
     app.use(helmet());
-    app.use(cors({ origin: config.CORS_ORIGIN }));
+    app.use(cors(corsOptions));
 
     // Body parsing
     app.use(express.json());

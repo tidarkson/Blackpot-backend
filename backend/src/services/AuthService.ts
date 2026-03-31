@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, StaffPosition, UserRole } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/environment';
@@ -7,6 +7,60 @@ import { JWTPayload, AuthResponse } from '../types/auth';
 const prisma = new PrismaClient();
 
 export class AuthService {
+    private mapClientRole(role: UserRole, positions: StaffPosition[]): string {
+      if (role === UserRole.STAFF) {
+        if (positions.includes(StaffPosition.CHEF)) return 'KITCHEN';
+        if (positions.includes(StaffPosition.HOST)) return 'HOST';
+        if (positions.includes(StaffPosition.CASHIER)) return 'CASHIER';
+        if (positions.includes(StaffPosition.SERVER)) return 'SERVER';
+        return 'STAFF';
+      }
+
+      return role;
+    }
+
+    private mapRegistrationRole(inputRole: string): {
+      role: UserRole;
+      positions: StaffPosition[];
+      clientRole: string;
+    } {
+      const normalized = inputRole.toUpperCase();
+
+      if (normalized === 'SERVER') {
+        return { role: UserRole.STAFF, positions: [StaffPosition.SERVER], clientRole: 'SERVER' };
+      }
+
+      if (normalized === 'KITCHEN') {
+        return { role: UserRole.STAFF, positions: [StaffPosition.CHEF], clientRole: 'KITCHEN' };
+      }
+
+      if (normalized === 'HOST') {
+        return { role: UserRole.STAFF, positions: [StaffPosition.HOST], clientRole: 'HOST' };
+      }
+
+      if (normalized === 'CASHIER') {
+        return { role: UserRole.STAFF, positions: [StaffPosition.CASHIER], clientRole: 'CASHIER' };
+      }
+
+      if (normalized === 'OWNER') {
+        return { role: UserRole.OWNER, positions: [], clientRole: 'OWNER' };
+      }
+
+      if (normalized === 'MANAGER') {
+        return { role: UserRole.MANAGER, positions: [], clientRole: 'MANAGER' };
+      }
+
+      if (normalized === 'SUPERVISOR') {
+        return { role: UserRole.SUPERVISOR, positions: [], clientRole: 'SUPERVISOR' };
+      }
+
+      if (normalized === 'CUSTOMER') {
+        return { role: UserRole.CUSTOMER, positions: [], clientRole: 'CUSTOMER' };
+      }
+
+      return { role: UserRole.STAFF, positions: [], clientRole: 'STAFF' };
+    }
+
   // Bcrypt rounds for hashing - balance between security and performance
   // Higher values = more secure but slower (use 10-12)
   private readonly BCRYPT_ROUNDS = 12;
@@ -224,7 +278,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        role: this.mapClientRole(user.role, user.positions),
         tenantId: user.tenantId,
         locationId: user.locationId || '',
       },
@@ -276,10 +330,37 @@ export class AuthService {
     email: string;
     password: string;
     name: string;
-    role: UserRole;
+    role: string;
     tenantId?: string;
-    locationId: string;
+    locationId?: string;
   }): Promise<AuthResponse> {
+        const roleMapping = this.mapRegistrationRole(data.role);
+
+        let tenantId = data.tenantId;
+        if (!tenantId) {
+          const firstTenant = await prisma.tenant.findFirst({
+            select: { id: true },
+            orderBy: { createdAt: 'asc' },
+          });
+
+          if (!firstTenant) {
+            throw new Error('No tenant available for signup. Please contact an administrator.');
+          }
+
+          tenantId = firstTenant.id;
+        }
+
+        let locationId = data.locationId;
+        if (!locationId) {
+          const firstLocation = await prisma.location.findFirst({
+            where: { tenantId },
+            select: { id: true },
+            orderBy: { createdAt: 'asc' },
+          });
+
+          locationId = firstLocation?.id;
+        }
+
     // Validate input
     if (!data.email || !this.isValidEmail(data.email)) {
       throw new Error('Invalid email address');
@@ -309,9 +390,10 @@ export class AuthService {
         email: data.email.toLowerCase(),
         name: data.name.trim(),
         passwordHash,
-        role: data.role,
-        tenantId: data.tenantId || '00000000-0000-0000-0000-000000000000',
-        locationId: data.locationId,
+        role: roleMapping.role,
+        positions: roleMapping.positions,
+        tenantId,
+        locationId,
         isActive: true,
       },
       include: { tenant: true, location: true },
@@ -333,7 +415,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        role: roleMapping.clientRole,
         tenantId: user.tenantId,
         locationId: user.locationId || '',
       },
@@ -350,7 +432,7 @@ export class AuthService {
     id: string;
     email: string;
     name: string;
-    role: UserRole;
+    role: string;
     tenantId: string;
     locationId: string;
     tenant: { id: string; name: string } | null;
@@ -372,7 +454,7 @@ export class AuthService {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
+      role: this.mapClientRole(user.role, user.positions),
       tenantId: user.tenantId,
       locationId: user.locationId || '',
       tenant: user.tenant,

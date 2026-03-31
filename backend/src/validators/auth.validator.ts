@@ -15,8 +15,8 @@ export const registerSchema = z.object({
   email: z.string().email('Invalid email format'),
   password: passwordStrengthSchema,
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-  role: z.enum(['OWNER', 'MANAGER', 'SUPERVISOR', 'STAFF', 'CUSTOMER']),
-  locationId: z.string().uuid(),
+  role: z.enum(['OWNER', 'MANAGER', 'SUPERVISOR', 'STAFF', 'CUSTOMER', 'SERVER', 'KITCHEN', 'HOST', 'CASHIER']),
+  locationId: z.string().uuid().optional(),
   tenantId: z.string().uuid().optional(), // For initial registration
 });
 
