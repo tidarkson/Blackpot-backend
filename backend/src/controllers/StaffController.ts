@@ -278,6 +278,86 @@ export class StaffController {
       });
     }
   }
+
+  async clockIn(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId!;
+      const { staffId } = req.params as { staffId: string };
+
+      const result = await staffService.clockInStaff(staffId, tenantId);
+
+      res.status(201).json({
+        status: 'success',
+        data: result,
+        message: 'Clocked in successfully',
+      });
+    } catch (error: any) {
+      res.status(error.statusCode || 400).json({
+        status: 'error',
+        message: error.message,
+      });
+    }
+  }
+
+  async clockOut(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId!;
+      const { staffId } = req.params as { staffId: string };
+
+      const result = await staffService.clockOutStaff(staffId, tenantId);
+
+      res.json({
+        status: 'success',
+        data: result,
+        message: 'Clocked out successfully',
+      });
+    } catch (error: any) {
+      res.status(error.statusCode || 400).json({
+        status: 'error',
+        message: error.message,
+      });
+    }
+  }
+
+  async startBreak(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId!;
+      const { staffId } = req.params as { staffId: string };
+
+      const result = await staffService.startBreak(staffId, tenantId);
+
+      res.status(201).json({
+        status: 'success',
+        data: result,
+        message: 'Break started',
+      });
+    } catch (error: any) {
+      res.status(error.statusCode || 400).json({
+        status: 'error',
+        message: error.message,
+      });
+    }
+  }
+
+  async endBreak(req: Request, res: Response): Promise<void> {
+    try {
+      const tenantId = req.user?.tenantId!;
+      const { staffId } = req.params as { staffId: string };
+
+      const result = await staffService.endBreak(staffId, tenantId);
+
+      res.status(201).json({
+        status: 'success',
+        data: result,
+        message: 'Break ended',
+      });
+    } catch (error: any) {
+      res.status(error.statusCode || 400).json({
+        status: 'error',
+        message: error.message,
+      });
+    }
+  }
 }
 
 export const staffController = new StaffController();

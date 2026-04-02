@@ -65,6 +65,21 @@ class SocketService {
       emittedAt: new Date().toISOString(),
     });
   }
+
+  emitStaffStatusUpdated(
+    tenantId: string,
+    staffId: string,
+    status: 'CLOCKED_IN' | 'CLOCKED_OUT' | 'ON_BREAK',
+    metadata?: unknown
+  ) {
+    this.emitToRoom('staff:status_updated', tenantId, 'all', {
+      tenantId,
+      staffId,
+      status,
+      metadata,
+      emittedAt: new Date().toISOString(),
+    });
+  }
 }
 
 export const socketService = new SocketService();

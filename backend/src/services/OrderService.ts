@@ -434,6 +434,58 @@ export class OrderService {
     }
   }
 
+  async forceCloseOrder(orderId: string, tenantId: string, reason: string, managerUserId: string): Promise<any> {
+    try {
+      const order = await this.getOrderById(orderId, tenantId);
+
+      if (!order) {
+        throw new Error('Order not found');
+      }
+
+      if (order.status === OrderStatus.CANCELLED) {
+        throw new Error('Cannot force-close a cancelled order');
+      }
+
+      if (order.status === OrderStatus.CLOSED) {
+        return order;
+      }
+
+      const closedOrder = await this.prisma.order.update({
+        where: { id: orderId },
+        data: {
+          status: OrderStatus.CLOSED,
+          closedAt: new Date(),
+        },
+        include: {
+          table: true,
+          server: true,
+          courses: {
+            include: {
+              items: true,
+            },
+          },
+          payments: true,
+          tips: true,
+          serviceCharge: true,
+        },
+      });
+
+      socketService.emitOrderStatusUpdated(tenantId, orderId, OrderStatus.CLOSED, closedOrder);
+
+      logger.warn('Order force-closed by manager', {
+        orderId,
+        tenantId,
+        managerUserId,
+        reason,
+      });
+
+      return closedOrder;
+    } catch (error: any) {
+      logger.error('Error force-closing order:', error.message);
+      throw error;
+    }
+  }
+
   async updateOrder(orderId: string, tenantId: string, data: any): Promise<any> {
     try {
       const order = await this.getOrderById(orderId, tenantId);

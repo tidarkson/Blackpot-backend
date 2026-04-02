@@ -11,6 +11,7 @@ import {
   addCourseSchema,
   addItemToOrderSchema,
   updateOrderStatusSchema,
+  forceCloseOrderSchema,
   listOrdersSchema,
   updateOrderItemSchema,
 } from '../validators/order.validator';
@@ -313,6 +314,35 @@ export class OrderController {
         success: true,
         data: order,
         message: 'Order ready for payment',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Force-close an order (manager/owner override)
+   * POST /api/orders/:orderId/force-close
+   */
+  async forceCloseOrder(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const tenantId = req.tenantId!;
+      const managerUserId = req.userId!;
+      const { orderId } = req.params;
+
+      const validatedData = forceCloseOrderSchema.parse(req.body);
+      const { reason } = validatedData;
+
+      const order = await this.orderService.forceCloseOrder(orderId, tenantId, reason, managerUserId);
+
+      // Invalidate order caches
+      await cacheInvalidationService.invalidateOrderCache(tenantId, orderId);
+
+      logger.warn('Order force-closed', { orderId, tenantId, managerUserId, reason });
+      res.json({
+        success: true,
+        data: order,
+        message: 'Order force-closed by manager override',
       });
     } catch (error) {
       next(error);

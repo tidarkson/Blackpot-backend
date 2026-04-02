@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { Decimal } from 'decimal.js';
 import { startOfWeek, endOfWeek, addDays, startOfDay, endOfDay } from 'date-fns';
 import logger from '../config/logger';
+import { socketService } from './SocketService';
 import { CreateScheduleRequest, UpdateScheduleRequest, ScheduleFilters } from '../validators/schedule.validator';
 
 const prisma = new PrismaClient();
@@ -282,6 +283,12 @@ export class ShiftService {
 
       logger.info(`🕐 Clock in recorded for shift ${shiftId}`);
 
+      if (shift.userId) {
+        socketService.emitStaffStatusUpdated(tenantId, shift.userId, 'CLOCKED_IN', {
+          shiftId,
+        });
+      }
+
       return clockIn;
     } catch (error: any) {
       logger.error('Error clocking in:', error.message);
@@ -345,6 +352,13 @@ export class ShiftService {
       });
 
       logger.info(`🕑 Clock out recorded for shift ${shiftId} - ${hoursWorked.toFixed(2)} hours worked`);
+
+      if (shift.userId) {
+        socketService.emitStaffStatusUpdated(tenantId, shift.userId, 'CLOCKED_OUT', {
+          shiftId,
+          hoursWorked,
+        });
+      }
 
       return updatedShift;
     } catch (error: any) {

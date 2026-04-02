@@ -45,6 +45,12 @@ export const updateOrderStatusSchema = z.object({
 });
 export type UpdateOrderStatusRequest = z.infer<typeof updateOrderStatusSchema>;
 
+// Force close order (manager/owner only)
+export const forceCloseOrderSchema = z.object({
+  reason: z.string().trim().min(5, 'Force-close reason is required').max(500),
+});
+export type ForceCloseOrderRequest = z.infer<typeof forceCloseOrderSchema>;
+
 // Add Special Request
 export const addSpecialRequestSchema = z.object({
   title: z.string().min(1, 'Title is required').max(100),

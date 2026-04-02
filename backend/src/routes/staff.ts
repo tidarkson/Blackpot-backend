@@ -84,6 +84,38 @@ router.put('/:staffId/availability', authenticate, ensureTenantAccess, (req: Req
 );
 
 /**
+ * POST /api/staff/:staffId/clock-in
+ * Clock in staff member using today's scheduled shift
+ */
+router.post('/:staffId/clock-in', authenticate, ensureTenantAccess, (req: Request, res: Response) =>
+  staffController.clockIn(req, res)
+);
+
+/**
+ * POST /api/staff/:staffId/clock-out
+ * Clock out staff member from active shift
+ */
+router.post('/:staffId/clock-out', authenticate, ensureTenantAccess, (req: Request, res: Response) =>
+  staffController.clockOut(req, res)
+);
+
+/**
+ * POST /api/staff/:staffId/break/start
+ * Start break for staff member
+ */
+router.post('/:staffId/break/start', authenticate, ensureTenantAccess, (req: Request, res: Response) =>
+  staffController.startBreak(req, res)
+);
+
+/**
+ * POST /api/staff/:staffId/break/end
+ * End break for staff member
+ */
+router.post('/:staffId/break/end', authenticate, ensureTenantAccess, (req: Request, res: Response) =>
+  staffController.endBreak(req, res)
+);
+
+/**
  * GET /api/staff/:staffId/metrics
  * Get staff performance metrics
  * Query params: startDate, endDate

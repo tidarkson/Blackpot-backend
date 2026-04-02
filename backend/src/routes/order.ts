@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
 import { OrderController } from '../controllers/OrderController';
 import { SpecialRequestController } from '../controllers/SpecialRequestController';
 import { OrderService } from '../services/OrderService';
@@ -83,6 +83,19 @@ router.patch('/:orderId/status', authenticate, orderUpdateLimiter, bindControlle
  * CLOSE ORDER (Prepare for payment)
  */
 router.patch('/:orderId/close', authenticate, orderUpdateLimiter, bindController(orderController.closeOrder));
+
+/**
+ * POST /api/orders/:orderId/force-close
+ * Rate Limit: 50 per minute per account
+ * FORCE CLOSE ORDER (Manager/Owner override)
+ */
+router.post(
+  '/:orderId/force-close',
+  authenticate,
+  requireRole('MANAGER', 'OWNER'),
+  orderUpdateLimiter,
+  bindController(orderController.forceCloseOrder)
+);
 
 /**
  * DELETE /api/orders/:orderId

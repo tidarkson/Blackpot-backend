@@ -2,6 +2,8 @@ import { PrismaClient, UserRole, StaffPosition, Shift, LeaveRequest, User } from
 import { Decimal } from 'decimal.js';
 import logger from '../config/logger';
 import { AuthService } from './AuthService';
+import { shiftService } from './ScheduleService';
+import { socketService } from './SocketService';
 import { CreateStaffRequest, UpdateStaffRequest, ListStaffFilters, AvailabilitySchema } from '../validators/staff.validator';
 
 const prisma = new PrismaClient();
@@ -888,6 +890,102 @@ export class StaffService {
       logger.error('Error fetching staff metrics:', error.message);
       throw error;
     }
+  }
+
+  async clockInStaff(staffId: string, tenantId: string) {
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const activeShift = await prisma.shift.findFirst({
+      where: {
+        tenantId,
+        userId: staffId,
+        status: 'ACTIVE',
+      },
+      orderBy: { scheduledStart: 'desc' },
+    });
+
+    if (activeShift) {
+      return {
+        shiftId: activeShift.id,
+      };
+    }
+
+    const scheduledShift = await prisma.shift.findFirst({
+      where: {
+        tenantId,
+        userId: staffId,
+        status: 'SCHEDULED',
+        scheduledDate: {
+          gte: startOfToday,
+          lte: endOfToday,
+        },
+      },
+      orderBy: { scheduledStart: 'asc' },
+    });
+
+    if (!scheduledShift) {
+      throw new Error('No scheduled shift found for this staff member today');
+    }
+
+    await shiftService.clockIn(scheduledShift.id, tenantId);
+
+    const staff = await prisma.user.findFirst({
+      where: {
+        id: staffId,
+        tenantId,
+      },
+      select: {
+        locationId: true,
+      },
+    });
+
+    return {
+      shiftId: scheduledShift.id,
+      locationId: staff?.locationId || undefined,
+    };
+  }
+
+  async clockOutStaff(staffId: string, tenantId: string) {
+    const activeShift = await prisma.shift.findFirst({
+      where: {
+        tenantId,
+        userId: staffId,
+        status: 'ACTIVE',
+      },
+      orderBy: { scheduledStart: 'desc' },
+    });
+
+    if (!activeShift) {
+      throw new Error('No active shift found for this staff member');
+    }
+
+    await shiftService.clockOut(activeShift.id, tenantId);
+
+    return {
+      shiftId: activeShift.id,
+    };
+  }
+
+  async startBreak(staffId: string, tenantId: string) {
+    socketService.emitStaffStatusUpdated(tenantId, staffId, 'ON_BREAK');
+
+    return {
+      staffId,
+      status: 'ON_BREAK',
+    };
+  }
+
+  async endBreak(staffId: string, tenantId: string) {
+    socketService.emitStaffStatusUpdated(tenantId, staffId, 'CLOCKED_IN');
+
+    return {
+      staffId,
+      status: 'CLOCKED_IN',
+    };
   }
 
   /**
