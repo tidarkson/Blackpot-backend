@@ -34,6 +34,7 @@ import cashSessionRoutes from './routes/cash-sessions';
 import shiftRoutes from './routes/shift';
 import reportRoutes from './routes/reports';
 import menuRoutes from './routes/menu';
+import paymentRoutes from './routes/payment';
 import orderRoutes from './routes/order';
 import kitchenRoutes from './routes/kitchen';
 import tableRoutes from './routes/table';
@@ -141,6 +142,7 @@ async function startServer() {
     app.use(`${config.API_PREFIX}/admin`, adminRoutes);
     app.use(`${config.API_PREFIX}/dashboard`, dashboardRoutes);
     app.use(`${config.API_PREFIX}/orders`, orderRoutes);
+    app.use(`${config.API_PREFIX}/payments`, paymentRoutes);
     app.use(`${config.API_PREFIX}/reports`, reportRoutes);
     app.use(`${config.API_PREFIX}/inventory`, inventoryRoutes);
 

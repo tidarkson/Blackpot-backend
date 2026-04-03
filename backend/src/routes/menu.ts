@@ -2,6 +2,7 @@ import express from 'express';
 import { MenuController } from '../controllers/MenuController';
 import { MenuItemController, MenuSectionController } from '../controllers/MenuItemController';
 import { authenticate } from '../middleware/auth';
+import { requirePermission } from '../middleware/requirePermission';
 
 const router = express.Router();
 
@@ -66,7 +67,10 @@ router.post('/items/create/new', MenuItemController.createItem);
 router.get('/items/:id/details', MenuItemController.getItemById);
 
 // Update item
-router.put('/items/:id/update', MenuItemController.updateItem);
+router.put('/items/:id/update', requirePermission('menu_items', 'edit'), MenuItemController.updateItem);
+
+// Compatibility endpoint for permission-aware item updates.
+router.patch('/:id/items', requirePermission('menu_items', 'edit'), MenuItemController.updateItem);
 
 // Delete item (soft delete)
 router.delete('/items/:id/delete', MenuItemController.deleteItem);

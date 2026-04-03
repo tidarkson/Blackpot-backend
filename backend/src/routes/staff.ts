@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { staffController } from '../controllers/StaffController';
 import { authenticate } from '../middleware/auth';
 import { ensureTenantAccess } from '../middleware/tenantIsolation';
+import { requirePermission } from '../middleware/requirePermission';
 
 const router = Router();
 
@@ -124,6 +125,17 @@ router.post('/:staffId/break/end', authenticate, ensureTenantAccess, (req: Reque
 router.get('/:staffId/metrics', authenticate, ensureTenantAccess, (req: Request, res: Response) =>
   staffController.getStaffMetrics(req, res)
 );
+
+router.get('/payroll', authenticate, ensureTenantAccess, requirePermission('payroll', 'view'), async (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'success',
+    code: 200,
+    data: {
+      items: [],
+      message: 'Payroll endpoint is permission-protected and ready for service wiring.',
+    },
+  });
+});
 
 /**
  * POST /api/staff/bulk

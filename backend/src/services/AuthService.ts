@@ -6,7 +6,69 @@ import { JWTPayload, AuthResponse } from '../types/auth';
 
 const prisma = new PrismaClient();
 
+type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'approve';
+type PermissionMap = Record<string, Record<PermissionAction, boolean>>;
+
 export class AuthService {
+    private readonly defaultPermissionsByRole: Record<string, PermissionMap> = {
+      OWNER: {
+        refunds: { view: true, create: true, edit: true, delete: true, approve: true },
+        menu_items: { view: true, create: true, edit: true, delete: true, approve: true },
+        tax_settings: { view: true, create: true, edit: true, delete: true, approve: true },
+        payroll: { view: true, create: true, edit: true, delete: true, approve: true },
+        roles_perms: { view: true, create: true, edit: true, delete: true, approve: true },
+      },
+      MANAGER: {
+        refunds: { view: true, create: true, edit: true, delete: false, approve: true },
+        menu_items: { view: true, create: true, edit: true, delete: true, approve: true },
+        tax_settings: { view: true, create: false, edit: true, delete: false, approve: true },
+        payroll: { view: true, create: false, edit: true, delete: false, approve: true },
+        roles_perms: { view: true, create: true, edit: true, delete: false, approve: true },
+      },
+      SUPERVISOR: {
+        refunds: { view: true, create: false, edit: false, delete: false, approve: false },
+        menu_items: { view: true, create: false, edit: true, delete: false, approve: false },
+        tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
+        payroll: { view: true, create: false, edit: false, delete: false, approve: false },
+        roles_perms: { view: true, create: false, edit: false, delete: false, approve: false },
+      },
+      STAFF: {
+        refunds: { view: true, create: false, edit: false, delete: false, approve: false },
+        menu_items: { view: true, create: false, edit: false, delete: false, approve: false },
+        tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
+        payroll: { view: false, create: false, edit: false, delete: false, approve: false },
+        roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+      },
+      SERVER: {
+        refunds: { view: true, create: false, edit: false, delete: false, approve: false },
+        menu_items: { view: true, create: false, edit: false, delete: false, approve: false },
+        tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
+        payroll: { view: false, create: false, edit: false, delete: false, approve: false },
+        roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+      },
+      KITCHEN: {
+        refunds: { view: false, create: false, edit: false, delete: false, approve: false },
+        menu_items: { view: true, create: false, edit: true, delete: false, approve: false },
+        tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
+        payroll: { view: false, create: false, edit: false, delete: false, approve: false },
+        roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+      },
+      HOST: {
+        refunds: { view: false, create: false, edit: false, delete: false, approve: false },
+        menu_items: { view: true, create: false, edit: false, delete: false, approve: false },
+        tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
+        payroll: { view: false, create: false, edit: false, delete: false, approve: false },
+        roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+      },
+      CASHIER: {
+        refunds: { view: true, create: false, edit: false, delete: false, approve: false },
+        menu_items: { view: true, create: false, edit: false, delete: false, approve: false },
+        tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
+        payroll: { view: false, create: false, edit: false, delete: false, approve: false },
+        roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+      },
+    };
+
     private mapClientRole(role: UserRole, positions: StaffPosition[]): string {
       if (role === UserRole.STAFF) {
         if (positions.includes(StaffPosition.CHEF)) return 'KITCHEN';
@@ -17,6 +79,39 @@ export class AuthService {
       }
 
       return role;
+    }
+
+    private getEffectiveRoleName(user: {
+      role: UserRole;
+      positions: StaffPosition[];
+      customRoleName: string | null;
+    }): string {
+      if (user.customRoleName) {
+        return user.customRoleName;
+      }
+
+      return this.mapClientRole(user.role, user.positions);
+    }
+
+    private getDefaultPermissions(roleName: string): PermissionMap {
+      const byRole = this.defaultPermissionsByRole[roleName.toUpperCase()];
+      return byRole ?? this.defaultPermissionsByRole.STAFF;
+    }
+
+    private async getResolvedPermissions(tenantId: string, roleName: string): Promise<PermissionMap> {
+      const persisted = await prisma.rolePermission.findFirst({
+        where: {
+          tenantId,
+          roleName,
+          deletedAt: null,
+        },
+      });
+
+      if (persisted?.permissions) {
+        return persisted.permissions as PermissionMap;
+      }
+
+      return this.getDefaultPermissions(roleName);
     }
 
     private mapRegistrationRole(inputRole: string): {
@@ -437,6 +532,7 @@ export class AuthService {
     locationId: string;
     tenant: { id: string; name: string } | null;
     location: { id: string; name: string } | null;
+    permissions: PermissionMap;
   }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -450,6 +546,9 @@ export class AuthService {
       throw new Error('User not found');
     }
 
+    const roleName = this.getEffectiveRoleName(user);
+    const permissions = await this.getResolvedPermissions(user.tenantId, roleName);
+
     return {
       id: user.id,
       email: user.email,
@@ -459,6 +558,7 @@ export class AuthService {
       locationId: user.locationId || '',
       tenant: user.tenant,
       location: user.location,
+      permissions,
     };
   }
 
