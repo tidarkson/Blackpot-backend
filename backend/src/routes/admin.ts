@@ -34,6 +34,9 @@ const DEFAULT_PERMISSIONS: Record<string, PermissionMap> = {
     tax_settings: { view: true, create: true, edit: true, delete: true, approve: true },
     payroll: { view: true, create: true, edit: true, delete: true, approve: true },
     roles_perms: { view: true, create: true, edit: true, delete: true, approve: true },
+    audit_log: { view: true, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: true, create: true, edit: true, delete: true, approve: true },
+    sys_general: { view: true, create: false, edit: true, delete: false, approve: false },
   },
   MANAGER: {
     refunds: { view: true, create: true, edit: true, delete: false, approve: true },
@@ -41,6 +44,9 @@ const DEFAULT_PERMISSIONS: Record<string, PermissionMap> = {
     tax_settings: { view: true, create: false, edit: true, delete: false, approve: true },
     payroll: { view: true, create: false, edit: true, delete: false, approve: true },
     roles_perms: { view: true, create: true, edit: true, delete: false, approve: true },
+    audit_log: { view: true, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: true, create: false, edit: true, delete: false, approve: false },
   },
   SUPERVISOR: {
     refunds: { view: true, create: false, edit: false, delete: false, approve: false },
@@ -48,6 +54,9 @@ const DEFAULT_PERMISSIONS: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: true, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: true, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   STAFF: {
     refunds: { view: true, create: false, edit: false, delete: false, approve: false },
@@ -55,6 +64,9 @@ const DEFAULT_PERMISSIONS: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: false, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   SERVER: {
     refunds: { view: true, create: false, edit: false, delete: false, approve: false },
@@ -62,6 +74,9 @@ const DEFAULT_PERMISSIONS: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: false, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   KITCHEN: {
     refunds: { view: false, create: false, edit: false, delete: false, approve: false },
@@ -69,6 +84,9 @@ const DEFAULT_PERMISSIONS: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: false, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   HOST: {
     refunds: { view: false, create: false, edit: false, delete: false, approve: false },
@@ -76,6 +94,9 @@ const DEFAULT_PERMISSIONS: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: false, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   CASHIER: {
     refunds: { view: true, create: false, edit: false, delete: false, approve: false },
@@ -83,6 +104,9 @@ const DEFAULT_PERMISSIONS: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: false, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
 };
 
@@ -687,22 +711,146 @@ router.get(
   }
 );
 
-/**
- * POST /api/admin/audit-logs
- * Get audit logs for admin actions (admin only)
- * Body: { startDate, endDate, userId?, action?, limit }
- * Rate Limit: 30 per minute
- */
-router.post(
-  '/audit-logs',
+router.get(
+  '/audit-log',
   authenticate,
   ensureTenantAccess,
+  requirePermission('audit_log', 'view'),
   adminEndpointLimiter,
   async (req: Request, res: Response) => {
-    // TODO: Implement audit logs endpoint
-    res.status(501).json({
-      error: 'Not Implemented',
-      message: 'Audit logs endpoint pending implementation',
+    const tenantId = req.user?.tenantId;
+
+    if (!tenantId) {
+      return res.status(401).json({ status: 'error', code: 401, message: 'Unauthorized' });
+    }
+
+    const startDateRaw = asParamString(req.query.startDate as string | string[] | undefined);
+    const endDateRaw = asParamString(req.query.endDate as string | string[] | undefined);
+    const actor = asParamString(req.query.actor as string | string[] | undefined);
+    const category = asParamString(req.query.category as string | string[] | undefined);
+    const page = Math.max(1, Number(asParamString(req.query.page as string | string[] | undefined) || 1));
+    const pageSize = Math.min(100, Math.max(1, Number(asParamString(req.query.pageSize as string | string[] | undefined) || 25)));
+
+    const startDate = startDateRaw ? new Date(startDateRaw) : null;
+    const endDate = endDateRaw ? new Date(endDateRaw) : null;
+
+    if (startDateRaw && Number.isNaN(startDate?.getTime())) {
+      return res.status(400).json({ status: 'error', code: 400, message: 'Invalid startDate' });
+    }
+
+    if (endDateRaw && Number.isNaN(endDate?.getTime())) {
+      return res.status(400).json({ status: 'error', code: 400, message: 'Invalid endDate' });
+    }
+
+    const dateFilter = {
+      gte: startDate ?? undefined,
+      lte: endDate ?? undefined,
+    };
+
+    const roleLogs = category && category !== 'all' && category !== 'Roles'
+      ? []
+      : await prisma.roleAuditLog.findMany({
+        where: {
+          tenantId,
+          createdAt: dateFilter,
+          actorName: actor
+            ? {
+              contains: actor,
+              mode: 'insensitive',
+            }
+            : undefined,
+        },
+      });
+
+    const financialLogs = category && category !== 'all' && category !== 'Financial'
+      ? []
+      : await prisma.financialAuditLog.findMany({
+        where: {
+          tenantId,
+          createdAt: dateFilter,
+          actorName: actor
+            ? {
+              contains: actor,
+              mode: 'insensitive',
+            }
+            : undefined,
+        },
+      });
+
+    const systemLogs = category && category !== 'all' && category !== 'System'
+      ? []
+      : await prisma.systemAuditLog.findMany({
+        where: {
+          tenantId,
+          createdAt: dateFilter,
+          actorName: actor
+            ? {
+              contains: actor,
+              mode: 'insensitive',
+            }
+            : undefined,
+        },
+      });
+
+    const normalizedCategory = category ? category.toLowerCase() : 'all';
+
+    const combined = [
+      ...roleLogs.map((entry) => ({
+        id: `role-${entry.id}`,
+        timestamp: entry.createdAt,
+        actor: entry.actorName,
+        action: entry.action,
+        details: `${entry.roleName} permissions updated`,
+        category: 'Roles',
+      })),
+      ...financialLogs.map((entry) => ({
+        id: `financial-${entry.id}`,
+        timestamp: entry.createdAt,
+        actor: entry.actorName,
+        action: `UPDATE_${entry.field.toUpperCase()}`,
+        details: `${entry.field}: ${entry.oldValue} -> ${entry.newValue}`,
+        category: 'Financial',
+      })),
+      ...systemLogs.map((entry) => ({
+        id: `system-${entry.id}`,
+        timestamp: entry.createdAt,
+        actor: entry.actorName,
+        action: entry.action,
+        details: entry.details,
+        category: entry.category,
+      })),
+    ]
+      .filter((entry) => {
+        if (normalizedCategory === 'all') {
+          return true;
+        }
+
+        return entry.category.toLowerCase() === normalizedCategory;
+      })
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+    const total = combined.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const offset = (page - 1) * pageSize;
+    const entries = combined.slice(offset, offset + pageSize);
+
+    return res.status(200).json({
+      status: 'success',
+      code: 200,
+      data: {
+        entries: entries.map((entry) => ({
+          id: entry.id,
+          timestamp: entry.timestamp.toISOString(),
+          actor: entry.actor,
+          action: entry.action,
+          details: entry.details,
+          category: entry.category,
+        })),
+        page,
+        pageSize,
+        total,
+        totalPages,
+      },
     });
   }
 );

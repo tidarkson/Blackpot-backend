@@ -210,6 +210,228 @@ export class DashboardService {
     }
   }
 
+  async getUpcomingReservations(tenantId: string, limit: number = 5, forceRefresh: boolean = false) {
+    const cacheKey = CacheKeyGenerator.generateDashboardKey('upcoming_reservations', tenantId);
+
+    if (!forceRefresh) {
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        logger.debug(`✅ Upcoming reservations cache HIT for tenant ${tenantId}`);
+        return { data: cached, _cache: 'HIT' };
+      }
+    }
+
+    try {
+      logger.debug(`❌ Upcoming reservations cache MISS for tenant ${tenantId}`);
+
+      const now = new Date();
+
+      const reservations = await this.prisma.reservation.findMany({
+        where: {
+          tenantId,
+          reservedAt: { gte: now },
+          status: { in: ['PENDING', 'CONFIRMED'] },
+        },
+        select: {
+          id: true,
+          guestName: true,
+          guestCount: true,
+          reservedAt: true,
+          notes: true,
+          table: {
+            select: {
+              name: true,
+            },
+          },
+        },
+        orderBy: {
+          reservedAt: 'asc',
+        },
+        take: limit,
+      });
+
+      const formatted = reservations.map((reservation) => ({
+        id: reservation.id,
+        reservationTime: reservation.reservedAt,
+        guestName: reservation.guestName,
+        partySize: reservation.guestCount,
+        tableNumber: reservation.table?.name ?? 'N/A',
+        notes: reservation.notes ?? null,
+      }));
+
+      await cacheService.set(cacheKey, formatted, CACHE_TTL.DASHBOARD);
+
+      return { data: formatted, _cache: 'MISS' };
+    } catch (error) {
+      logger.error(`Failed to fetch upcoming reservations for tenant ${tenantId}:`, error);
+      throw error;
+    }
+  }
+
+  async getServerPerformance(tenantId: string, forceRefresh: boolean = false) {
+    const cacheKey = CacheKeyGenerator.generateDashboardKey('server_performance', tenantId);
+
+    if (!forceRefresh) {
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        logger.debug(`✅ Server performance cache HIT for tenant ${tenantId}`);
+        return { data: cached, _cache: 'HIT' };
+      }
+    }
+
+    try {
+      logger.debug(`❌ Server performance cache MISS for tenant ${tenantId}`);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const [orders, tips] = await Promise.all([
+        this.prisma.order.findMany({
+          where: {
+            tenantId,
+            createdAt: { gte: today, lt: tomorrow },
+            status: { in: ['COMPLETED', 'PAID', 'CLOSED'] },
+          },
+          select: {
+            serverId: true,
+            tableId: true,
+            total: true,
+            server: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        }),
+        this.prisma.tip.findMany({
+          where: {
+            tenantId,
+            createdAt: { gte: today, lt: tomorrow },
+          },
+          select: {
+            serverId: true,
+            amount: true,
+          },
+        }),
+      ]);
+
+      const performanceByServer = new Map<string, {
+        id: string;
+        name: string;
+        revenue: number;
+        tables: Set<string>;
+      }>();
+
+      for (const order of orders) {
+        const revenue = typeof order.total === 'number' ? order.total : order.total.toNumber?.() || 0;
+
+        const existing = performanceByServer.get(order.serverId) ?? {
+          id: order.serverId,
+          name: order.server?.name || 'Unknown',
+          revenue: 0,
+          tables: new Set<string>(),
+        };
+
+        existing.revenue += revenue;
+        if (order.tableId) {
+          existing.tables.add(order.tableId);
+        }
+
+        performanceByServer.set(order.serverId, existing);
+      }
+
+      const tipByServer = new Map<string, number>();
+      for (const tip of tips) {
+        const amount = typeof tip.amount === 'number' ? tip.amount : tip.amount.toNumber?.() || 0;
+        tipByServer.set(tip.serverId, (tipByServer.get(tip.serverId) || 0) + amount);
+      }
+
+      const formatted = Array.from(performanceByServer.values())
+        .map((server) => {
+          const tipTotal = tipByServer.get(server.id) || 0;
+          const avgTips = server.revenue > 0 ? Number(((tipTotal / server.revenue) * 100).toFixed(1)) : 0;
+
+          return {
+            id: server.id,
+            name: server.name,
+            tables: server.tables.size,
+            revenue: Number(server.revenue.toFixed(2)),
+            avgTips,
+            trend: 'up' as const,
+          };
+        })
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+
+      await cacheService.set(cacheKey, formatted, CACHE_TTL.DASHBOARD);
+
+      return { data: formatted, _cache: 'MISS' };
+    } catch (error) {
+      logger.error(`Failed to fetch server performance for tenant ${tenantId}:`, error);
+      throw error;
+    }
+  }
+
+  async getLowStockItems(tenantId: string, limit: number = 10, forceRefresh: boolean = false) {
+    const cacheKey = CacheKeyGenerator.generateDashboardKey('low_stock', tenantId);
+
+    if (!forceRefresh) {
+      const cached = await cacheService.get(cacheKey);
+      if (cached) {
+        logger.debug(`✅ Low stock cache HIT for tenant ${tenantId}`);
+        return { data: cached, _cache: 'HIT' };
+      }
+    }
+
+    try {
+      logger.debug(`❌ Low stock cache MISS for tenant ${tenantId}`);
+
+      const items = await this.prisma.inventoryItem.findMany({
+        where: {
+          tenantId,
+          currentStock: {
+            lte: this.prisma.inventoryItem.fields.minStock,
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+          currentStock: true,
+          minStock: true,
+          unit: true,
+        },
+        orderBy: {
+          updatedAt: 'desc',
+        },
+        take: limit,
+      });
+
+      const formatted = items.map((item) => {
+        const current = typeof item.currentStock === 'number' ? item.currentStock : item.currentStock.toNumber?.() || 0;
+        const threshold = typeof item.minStock === 'number' ? item.minStock : item.minStock.toNumber?.() || 0;
+
+        return {
+          id: item.id,
+          name: item.name,
+          current,
+          threshold,
+          unit: item.unit,
+          urgency: current <= threshold * 0.5 ? 'critical' as const : 'warning' as const,
+        };
+      });
+
+      await cacheService.set(cacheKey, formatted, CACHE_TTL.DASHBOARD);
+
+      return { data: formatted, _cache: 'MISS' };
+    } catch (error) {
+      logger.error(`Failed to fetch low stock items for tenant ${tenantId}:`, error);
+      throw error;
+    }
+  }
+
   /**
    * Private helper: Get today's sales report
    */

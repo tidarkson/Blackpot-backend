@@ -128,6 +128,121 @@ export class DashboardController {
     }
   }
 
+  static async getUpcomingReservations(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = (req as any).user?.tenantId || (req as any).tenant?.id;
+
+      if (!tenantId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Tenant not found in request context',
+        });
+      }
+
+      const limit = Math.min(parseInt(req.query.limit as string, 10) || 5, 20);
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
+      const reservations: any = await DashboardService.getUpcomingReservations(
+        tenantId,
+        limit,
+        forceRefresh || bypassCache
+      );
+
+      const cacheStatus = reservations._cache || 'MISS';
+      const { _cache, ...reservationData } = reservations;
+
+      return res
+        .set('X-Cache', cacheStatus)
+        .set('Cache-Control', 'public, max-age=60')
+        .json({
+          success: true,
+          data: reservationData.data || reservationData,
+          count: (reservationData.data || reservationData).length,
+          _cache: cacheStatus,
+        });
+    } catch (error) {
+      logger.error('Error in getUpcomingReservations:', error);
+      next(error);
+    }
+  }
+
+  static async getServerPerformance(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = (req as any).user?.tenantId || (req as any).tenant?.id;
+
+      if (!tenantId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Tenant not found in request context',
+        });
+      }
+
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
+      const performance: any = await DashboardService.getServerPerformance(
+        tenantId,
+        forceRefresh || bypassCache
+      );
+
+      const cacheStatus = performance._cache || 'MISS';
+      const { _cache, ...performanceData } = performance;
+
+      return res
+        .set('X-Cache', cacheStatus)
+        .set('Cache-Control', 'public, max-age=60')
+        .json({
+          success: true,
+          data: performanceData.data || performanceData,
+          count: (performanceData.data || performanceData).length,
+          _cache: cacheStatus,
+        });
+    } catch (error) {
+      logger.error('Error in getServerPerformance:', error);
+      next(error);
+    }
+  }
+
+  static async getLowStock(req: Request, res: Response, next: NextFunction) {
+    try {
+      const tenantId = (req as any).user?.tenantId || (req as any).tenant?.id;
+
+      if (!tenantId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Tenant not found in request context',
+        });
+      }
+
+      const limit = Math.min(parseInt(req.query.limit as string, 10) || 10, 50);
+      const bypassCache = req.query.cache === 'false';
+      const forceRefresh = req.query.refresh === 'true';
+
+      const lowStock: any = await DashboardService.getLowStockItems(
+        tenantId,
+        limit,
+        forceRefresh || bypassCache
+      );
+
+      const cacheStatus = lowStock._cache || 'MISS';
+      const { _cache, ...stockData } = lowStock;
+
+      return res
+        .set('X-Cache', cacheStatus)
+        .set('Cache-Control', 'public, max-age=60')
+        .json({
+          success: true,
+          data: stockData.data || stockData,
+          count: (stockData.data || stockData).length,
+          _cache: cacheStatus,
+        });
+    } catch (error) {
+      logger.error('Error in getLowStock:', error);
+      next(error);
+    }
+  }
+
   /**
    * GET /api/dashboard/today-summary
    * Cache: 1 minute TTL

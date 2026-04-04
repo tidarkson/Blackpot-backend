@@ -155,6 +155,10 @@ export const apiLimiter: RateLimitRequestHandler = rateLimit({
   keyGenerator: keyGenerator as any,
   handler: errorResponder,
   skip: (req: Request): boolean => {
+    if (req.method === 'OPTIONS') {
+      return true;
+    }
+
     // Don't apply rate limiting to health checks
     return req.path === '/health' || req.path === '/api/health';
   },
@@ -477,6 +481,7 @@ export const dashboardRetrievalLimiter: RateLimitRequestHandler = rateLimit({
   legacyHeaders: false,
   keyGenerator: keyGenerator as any,
   handler: createErrorResponder('Dashboard rate limit exceeded. Too many requests. Please wait before trying again.', 'dashboard'),
+  skip: (req: Request): boolean => req.method === 'OPTIONS',
   store: createStore('rate-limit:dashboard:'),
 });
 

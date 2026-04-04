@@ -15,6 +15,9 @@ const defaultPermissionsByRole: Record<string, PermissionMap> = {
     tax_settings: { view: true, create: true, edit: true, delete: true, approve: true },
     payroll: { view: true, create: true, edit: true, delete: true, approve: true },
     roles_perms: { view: true, create: true, edit: true, delete: true, approve: true },
+    audit_log: { view: true, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: true, create: true, edit: true, delete: true, approve: true },
+    sys_general: { view: true, create: false, edit: true, delete: false, approve: false },
   },
   MANAGER: {
     refunds: { view: true, create: true, edit: true, delete: false, approve: true },
@@ -22,6 +25,9 @@ const defaultPermissionsByRole: Record<string, PermissionMap> = {
     tax_settings: { view: true, create: false, edit: true, delete: false, approve: true },
     payroll: { view: true, create: false, edit: true, delete: false, approve: true },
     roles_perms: { view: true, create: true, edit: true, delete: false, approve: true },
+    audit_log: { view: true, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: true, create: false, edit: true, delete: false, approve: false },
   },
   SUPERVISOR: {
     refunds: { view: true, create: false, edit: false, delete: false, approve: false },
@@ -29,6 +35,9 @@ const defaultPermissionsByRole: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: true, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: true, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   STAFF: {
     refunds: { view: true, create: false, edit: false, delete: false, approve: false },
@@ -36,6 +45,9 @@ const defaultPermissionsByRole: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: false, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   SERVER: {
     refunds: { view: true, create: false, edit: false, delete: false, approve: false },
@@ -43,6 +55,9 @@ const defaultPermissionsByRole: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: false, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   KITCHEN: {
     refunds: { view: false, create: false, edit: false, delete: false, approve: false },
@@ -50,6 +65,9 @@ const defaultPermissionsByRole: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: false, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   HOST: {
     refunds: { view: false, create: false, edit: false, delete: false, approve: false },
@@ -57,6 +75,9 @@ const defaultPermissionsByRole: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: false, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
   CASHIER: {
     refunds: { view: true, create: false, edit: false, delete: false, approve: false },
@@ -64,6 +85,9 @@ const defaultPermissionsByRole: Record<string, PermissionMap> = {
     tax_settings: { view: false, create: false, edit: false, delete: false, approve: false },
     payroll: { view: false, create: false, edit: false, delete: false, approve: false },
     roles_perms: { view: false, create: false, edit: false, delete: false, approve: false },
+    audit_log: { view: false, create: false, edit: false, delete: false, approve: false },
+    integrations: { view: false, create: false, edit: false, delete: false, approve: false },
+    sys_general: { view: false, create: false, edit: false, delete: false, approve: false },
   },
 };
 

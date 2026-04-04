@@ -33,6 +33,9 @@ model Tenant {
   financialSetting            FinancialSetting?
   financialSettings           FinancialSettings?
   financialAuditLogs          FinancialAuditLog[]
+  tenantSettings              TenantSettings?
+  tenantIntegrationSettings   TenantIntegrationSettings?
+  systemAuditLogs             SystemAuditLog[]
   orders                      Order[]
   payments                    Payment[]
   tips                        Tip[]
@@ -808,6 +811,59 @@ model FinancialAuditLog {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+  @@index([createdAt])
+}
+
+model TenantSettings {
+  id             String   @id @default(cuid())
+  tenantId       String   @unique
+  restaurantName String
+  timezone       String   @default("America/New_York")
+  dateFormat     String   @default("MM/DD/YYYY")
+  timeFormat     String   @default("12h")
+  logoUrl        String?
+  receiptFooter  String?
+  language       String   @default("en")
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model TenantIntegrationSettings {
+  id                         String   @id @default(cuid())
+  tenantId                   String   @unique
+  stripePublishableKeyEnc    String?
+  stripeWebhookSecretEnc     String?
+  stripeTestMode             Boolean  @default(true)
+  printerIp                  String?
+  printerPort                Int?
+  kdsStations                Json?
+  lowStockThreshold          Int      @default(5)
+  alertsEmail                String?
+  slackWebhookUrlEnc         String?
+  updatedAt                  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model SystemAuditLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  actorId   String
+  actorName String
+  category  String
+  action    String
+  details   String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([category])
   @@index([createdAt])
 }
 

@@ -57,6 +57,30 @@ router.get(
   (req: Request, res: Response) => DashboardController.getRecentOrders(req, res, () => {})
 );
 
+router.get(
+  '/upcoming-reservations',
+  authenticate,
+  ensureTenantAccess,
+  dashboardRetrievalLimiter,
+  (req: Request, res: Response) => DashboardController.getUpcomingReservations(req, res, () => {})
+);
+
+router.get(
+  '/server-performance',
+  authenticate,
+  ensureTenantAccess,
+  dashboardRetrievalLimiter,
+  (req: Request, res: Response) => DashboardController.getServerPerformance(req, res, () => {})
+);
+
+router.get(
+  '/low-stock',
+  authenticate,
+  ensureTenantAccess,
+  dashboardRetrievalLimiter,
+  (req: Request, res: Response) => DashboardController.getLowStock(req, res, () => {})
+);
+
 /**
  * GET /api/dashboard/today-summary
  * Rate Limit: 200 per minute per account

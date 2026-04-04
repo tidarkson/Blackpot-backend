@@ -48,6 +48,7 @@ import advancedSchedulingRoutes from './routes/advanced-scheduling';
 import dashboardRoutes from './routes/dashboard';
 import jobsRoutes from './routes/jobs';
 import financialSettingsRoutes from './routes/financial-settings';
+import tenantRoutes from './routes/tenant';
 import { emailQueue } from './queues/definitions/email.queue';
 import { scheduledQueue } from './queues/definitions/scheduled.queue';
 
@@ -83,12 +84,12 @@ async function startServer() {
     // ✅ Sentry request handler - MUST be early in middleware chain
     app.use(sentryRequestMiddleware);
 
-    // Global rate limiting middleware
-    app.use('/api/', apiLimiter);
-
     // Security middleware
     app.use(helmet());
     app.use(cors(corsOptions));
+
+    // Global rate limiting middleware
+    app.use('/api/', apiLimiter);
 
     // Body parsing
     app.use(express.json());
@@ -162,6 +163,7 @@ async function startServer() {
     app.use(`${config.API_PREFIX}/advanced`, advancedSchedulingRoutes);
     app.use(`${config.API_PREFIX}/jobs`, jobsRoutes);
     app.use(`${config.API_PREFIX}/financial-settings`, financialSettingsRoutes);
+    app.use(`${config.API_PREFIX}/tenant`, tenantRoutes);
 
     // 404 handler
     app.use((req: Request, res: Response) => {
