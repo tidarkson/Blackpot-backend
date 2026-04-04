@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient, StaffPosition, UserRole } from '@prisma/client';
+import { Prisma, PrismaClient, StaffPosition, UserRole } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import { adminEndpointLimiter } from '../middleware/rateLimiter';
 import { ensureTenantAccess } from '../middleware/tenantIsolation';
@@ -8,6 +8,22 @@ import { redisClient } from '../utils/redisClient';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+function asParamString(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] ?? '';
+  }
+
+  return value ?? '';
+}
+
+function asInputJson(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  if (value === null || value === undefined) {
+    return Prisma.JsonNull;
+  }
+
+  return value as Prisma.InputJsonValue;
+}
 
 const SYSTEM_ROLES = ['OWNER', 'MANAGER', 'SUPERVISOR', 'STAFF', 'SERVER', 'KITCHEN', 'HOST', 'CASHIER'];
 
@@ -268,7 +284,7 @@ const createRoleHandler = async (req: Request, res: Response) => {
       actorName,
       action: 'CREATE_ROLE',
       roleName: created.roleName,
-      after: created.permissions,
+      after: asInputJson(created.permissions),
     },
   });
 
@@ -366,13 +382,14 @@ router.get('/roles', authenticate, ensureTenantAccess, adminEndpointLimiter, asy
  */
 router.get('/roles/:id', authenticate, ensureTenantAccess, adminEndpointLimiter, async (req: Request, res: Response) => {
   const tenantId = req.user?.tenantId;
+  const roleId = asParamString(req.params.id);
   if (!tenantId) {
     return res.status(401).json({ status: 'error', code: 401, message: 'Unauthorized' });
   }
 
   const role = await prisma.rolePermission.findFirst({
     where: {
-      id: req.params.id,
+      id: roleId,
       tenantId,
       deletedAt: null,
     },
@@ -410,6 +427,7 @@ router.patch('/roles/:id', authenticate, ensureTenantAccess, requirePermission('
   const tenantId = req.user?.tenantId;
   const actorId = req.user?.userId;
   const actorName = req.user?.email ?? 'unknown';
+  const roleId = asParamString(req.params.id);
   const { name, permissions } = req.body as { name?: string; permissions?: PermissionMap };
 
   if (!tenantId || !actorId) {
@@ -418,7 +436,7 @@ router.patch('/roles/:id', authenticate, ensureTenantAccess, requirePermission('
 
   const existingRole = await prisma.rolePermission.findFirst({
     where: {
-      id: req.params.id,
+      id: roleId,
       tenantId,
       deletedAt: null,
     },
@@ -439,7 +457,7 @@ router.patch('/roles/:id', authenticate, ensureTenantAccess, requirePermission('
     where: { id: existingRole.id },
     data: {
       roleName: nextRoleName,
-      permissions: permissions ?? existingRole.permissions,
+      permissions: asInputJson(permissions ?? existingRole.permissions),
     },
   });
 
@@ -450,8 +468,8 @@ router.patch('/roles/:id', authenticate, ensureTenantAccess, requirePermission('
       actorName,
       action: 'UPDATE_PERMISSIONS',
       roleName: updated.roleName,
-      before,
-      after: updated.permissions,
+      before: asInputJson(before),
+      after: asInputJson(updated.permissions),
     },
   });
 
@@ -477,6 +495,7 @@ router.delete('/roles/:id', authenticate, ensureTenantAccess, adminEndpointLimit
   const tenantId = req.user?.tenantId;
   const actorId = req.user?.userId;
   const actorName = req.user?.email ?? 'unknown';
+  const roleId = asParamString(req.params.id);
 
   if (!tenantId || !actorId) {
     return res.status(401).json({ status: 'error', code: 401, message: 'Unauthorized' });
@@ -484,7 +503,7 @@ router.delete('/roles/:id', authenticate, ensureTenantAccess, adminEndpointLimit
 
   const role = await prisma.rolePermission.findFirst({
     where: {
-      id: req.params.id,
+      id: roleId,
       tenantId,
       deletedAt: null,
     },
@@ -522,7 +541,7 @@ router.delete('/roles/:id', authenticate, ensureTenantAccess, adminEndpointLimit
       actorName,
       action: 'DELETE_ROLE',
       roleName: role.roleName,
-      before: role.permissions,
+      before: asInputJson(role.permissions),
     },
   });
 
@@ -535,6 +554,7 @@ router.post('/roles/:id/assign', authenticate, ensureTenantAccess, adminEndpoint
   const tenantId = req.user?.tenantId;
   const actorId = req.user?.userId;
   const actorName = req.user?.email ?? 'unknown';
+  const roleId = asParamString(req.params.id);
   const { staffId } = req.body as { staffId?: string; roleId?: string };
 
   if (!tenantId || !actorId) {
@@ -547,7 +567,7 @@ router.post('/roles/:id/assign', authenticate, ensureTenantAccess, adminEndpoint
 
   const role = await prisma.rolePermission.findFirst({
     where: {
-      id: req.params.id,
+      id: roleId,
       tenantId,
       deletedAt: null,
     },

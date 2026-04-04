@@ -6,6 +6,8 @@
 import { Queue } from 'bullmq';
 import { queueConfigs, QUEUE_NAMES } from '../config/queue.config';
 import logger from '../../config/logger';
+import { config } from '../../config/environment';
+import { createDisabledQueue } from '../utils/disabledQueue';
 
 export interface DataProcessingJobData {
   operation: 'inventory-reconciliation' | 'payment-settlement' | 'database-cleanup' | 'export-data' | 'sync-service';
@@ -21,8 +23,13 @@ class DataProcessingQueue {
   private queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.DATA_PROCESSING, queueConfigs.dataProcessing);
-    this.setupEventHandlers();
+    if (config.REDIS_ENABLED) {
+      this.queue = new Queue(QUEUE_NAMES.DATA_PROCESSING, queueConfigs.dataProcessing);
+      this.setupEventHandlers();
+      return;
+    }
+
+    this.queue = createDisabledQueue(QUEUE_NAMES.DATA_PROCESSING) as unknown as Queue;
   }
 
   /**

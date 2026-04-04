@@ -14,6 +14,17 @@ class RedisClientWrapper {
   private reconnectInterval: NodeJS.Timer | null = null;
 
   constructor() {
+    if (!config.REDIS_ENABLED) {
+      // Keep a client instance for API compatibility, but never auto-connect.
+      this.client = new Redis({
+        lazyConnect: true,
+        enableOfflineQueue: false,
+      });
+      this.isConnected = false;
+      logger.warn('⚠️ Redis client initialized in disabled mode (REDIS_ENABLED=false)');
+      return;
+    }
+
     const redisOptions: RedisOptions = {
       host: config.REDIS_HOST,
       port: config.REDIS_PORT,
@@ -115,6 +126,9 @@ class RedisClientWrapper {
    * Get connection status as string
    */
   public getStatus(): string {
+    if (!config.REDIS_ENABLED) {
+      return 'disabled';
+    }
     return this.client.status;
   }
 

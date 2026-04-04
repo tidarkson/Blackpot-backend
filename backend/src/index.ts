@@ -47,6 +47,7 @@ import scheduleRoutes from './routes/schedules';
 import advancedSchedulingRoutes from './routes/advanced-scheduling';
 import dashboardRoutes from './routes/dashboard';
 import jobsRoutes from './routes/jobs';
+import financialSettingsRoutes from './routes/financial-settings';
 import { emailQueue } from './queues/definitions/email.queue';
 import { scheduledQueue } from './queues/definitions/scheduled.queue';
 
@@ -160,6 +161,7 @@ async function startServer() {
     app.use(`${config.API_PREFIX}/schedules`, scheduleRoutes);
     app.use(`${config.API_PREFIX}/advanced`, advancedSchedulingRoutes);
     app.use(`${config.API_PREFIX}/jobs`, jobsRoutes);
+    app.use(`${config.API_PREFIX}/financial-settings`, financialSettingsRoutes);
 
     // 404 handler
     app.use((req: Request, res: Response) => {

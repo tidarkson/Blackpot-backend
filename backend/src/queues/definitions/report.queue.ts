@@ -6,6 +6,8 @@
 import { Queue } from 'bullmq';
 import { queueConfigs, QUEUE_NAMES } from '../config/queue.config';
 import logger from '../../config/logger';
+import { config } from '../../config/environment';
+import { createDisabledQueue } from '../utils/disabledQueue';
 
 export interface ReportJobData {
   type: 'financial' | 'sales' | 'inventory' | 'staffPerformance' | 'export';
@@ -25,8 +27,13 @@ class ReportQueue {
   private queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.REPORT, queueConfigs.report);
-    this.setupEventHandlers();
+    if (config.REDIS_ENABLED) {
+      this.queue = new Queue(QUEUE_NAMES.REPORT, queueConfigs.report);
+      this.setupEventHandlers();
+      return;
+    }
+
+    this.queue = createDisabledQueue(QUEUE_NAMES.REPORT) as unknown as Queue;
   }
 
   /**

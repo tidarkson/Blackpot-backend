@@ -31,6 +31,8 @@ model Tenant {
   notifications               Notification[]
   emailLogs                   EmailLog[]
   financialSetting            FinancialSetting?
+  financialSettings           FinancialSettings?
+  financialAuditLogs          FinancialAuditLog[]
   orders                      Order[]
   payments                    Payment[]
   tips                        Tip[]
@@ -258,8 +260,18 @@ model MenuItem {
   name        String
   description String?
   price       Decimal  @db.Decimal(10, 2)
+  cost        Decimal? @db.Decimal(10, 2)
+  category    String?
+  dietary     String[] @default([])
   isAvailable Boolean  @default(true)
-  allergens   String? // JSON array: ["PEANUTS", "DAIRY", "GLUTEN"]
+  allergens   String[] @default([])
+  imageUrl    String?
+  preparationTime Int?
+  position    Int?
+  archivedAt  DateTime?
+  availabilityWindows Json? // [{ day: "MON", startTime: "06:00", endTime: "11:00" }]
+  modifiers   Json?
+  kdsStation  String? // "GRILL" | "COLD" | "BAR" | "FRYER" | "PASTRY"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -760,6 +772,43 @@ model FinancialSetting {
   updatedAt         DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model FinancialSettings {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique
+  taxRate            Decimal  @default(0.0875) @db.Decimal(5, 4)
+  taxLabel           String   @default("Tax")
+  serviceChargeRate  Decimal  @default(0.0) @db.Decimal(5, 4)
+  serviceChargeLabel String   @default("Service Charge")
+  serviceChargeApply Boolean  @default(false)
+  tipPolicy          String   @default("OPTIONAL")
+  defaultTipPercent  Decimal  @default(0.18) @db.Decimal(5, 4)
+  roundingPolicy     String   @default("NONE")
+  currencyCode       String   @default("USD")
+  currencyLocale     String   @default("en-US")
+  currencySymbol     String   @default("$")
+  payoutSchedule     String   @default("WEEKLY")
+  updatedAt          DateTime @updatedAt
+  updatedBy          String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model FinancialAuditLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  actorId   String
+  actorName String
+  field     String
+  oldValue  String
+  newValue  String
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([createdAt])
 }
 
 // ===============================

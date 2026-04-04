@@ -6,6 +6,8 @@
 import { Queue } from 'bullmq';
 import { deadLetterQueueConfig, QUEUE_NAMES } from '../config/queue.config';
 import logger from '../../config/logger';
+import { config } from '../../config/environment';
+import { createDisabledQueue } from '../utils/disabledQueue';
 
 export interface FailedJobData {
   originalQueue: string;
@@ -24,8 +26,13 @@ class FailedJobsQueue {
   private queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.DEAD_LETTER, deadLetterQueueConfig);
-    this.setupEventHandlers();
+    if (config.REDIS_ENABLED) {
+      this.queue = new Queue(QUEUE_NAMES.DEAD_LETTER, deadLetterQueueConfig);
+      this.setupEventHandlers();
+      return;
+    }
+
+    this.queue = createDisabledQueue(QUEUE_NAMES.DEAD_LETTER) as unknown as Queue;
   }
 
   async addJob(jobName: string, data: FailedJobData): Promise<void> {
